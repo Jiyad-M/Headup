@@ -1,0 +1,6 @@
+{
+  "name": "Kiosk Launcher",
+  "description": "Custom Android Kiosk Launcher with restricted app access, Uber Driver and Google Maps split-screen shortcut, power-sensing display control, 8-digit PIN with OTP recovery words, and voice payment announcements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
