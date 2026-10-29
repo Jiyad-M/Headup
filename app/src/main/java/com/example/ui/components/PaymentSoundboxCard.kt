@@ -73,7 +73,7 @@ fun PaymentSoundboxCard(
     var customAmountText by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val presetAmounts = listOf(2.0, 5.0, 10.0, 20.0, 50.0)
+    val presetAmounts = listOf(68.0, 110.0, 182.0, 500.0, 1000.0)
 
     Card(
         modifier = modifier

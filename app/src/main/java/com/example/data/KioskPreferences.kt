@@ -22,16 +22,63 @@ class KioskPreferences(context: Context) {
         private const val KEY_KIOSK_LOCKED = "kiosk_mode_locked"
         private const val KEY_HUD_THEME = "kiosk_hud_theme"
         private const val KEY_HUD_MIRRORED = "kiosk_hud_mirrored"
+
+        // Account Activation & Recovery Keys
+        private const val KEY_IS_ACTIVATED = "kiosk_is_activated"
+        private const val KEY_ACCOUNT_NAME = "kiosk_account_name"
+        private const val KEY_PRIMARY_PHONE = "kiosk_primary_phone"
+        private const val KEY_ALT_PHONE = "kiosk_alt_phone"
+        private const val KEY_RECOVERY_WORD_1 = "kiosk_recovery_word_1"
+        private const val KEY_RECOVERY_WORD_2 = "kiosk_recovery_word_2"
+        private const val KEY_IS_RECOVERY_VERIFIED = "kiosk_is_recovery_verified"
+        private const val KEY_PASSWORD_RESET_UNLOCK_TIME = "kiosk_pwd_reset_unlock_time"
+
         const val DEFAULT_PIN = "12345678"
     }
+
+    var isActivated: Boolean
+        get() = prefs.getBoolean(KEY_IS_ACTIVATED, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_ACTIVATED, value).apply()
+
+    var accountName: String
+        get() = prefs.getString(KEY_ACCOUNT_NAME, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ACCOUNT_NAME, value).apply()
+
+    var primaryPhone: String
+        get() = prefs.getString(KEY_PRIMARY_PHONE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_PRIMARY_PHONE, value).apply()
+
+    var altPhone: String
+        get() = prefs.getString(KEY_ALT_PHONE, prefs.getString(KEY_SECONDARY_PHONE, "") ?: "") ?: ""
+        set(value) {
+            prefs.edit().putString(KEY_ALT_PHONE, value).putString(KEY_SECONDARY_PHONE, value).apply()
+        }
+
+    var recoveryWord1: String
+        get() = prefs.getString(KEY_RECOVERY_WORD_1, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_RECOVERY_WORD_1, value).apply()
+
+    var recoveryWord2: String
+        get() = prefs.getString(KEY_RECOVERY_WORD_2, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_RECOVERY_WORD_2, value).apply()
+
+    var isRecoveryVerified: Boolean
+        get() = prefs.getBoolean(KEY_IS_RECOVERY_VERIFIED, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_RECOVERY_VERIFIED, value).apply()
+
+    var passwordResetUnlockTime: Long
+        get() = prefs.getLong(KEY_PASSWORD_RESET_UNLOCK_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_PASSWORD_RESET_UNLOCK_TIME, value).apply()
 
     var pin: String
         get() = prefs.getString(KEY_PIN, DEFAULT_PIN) ?: DEFAULT_PIN
         set(value) = prefs.edit().putString(KEY_PIN, value).apply()
 
     var secondaryPhone: String
-        get() = prefs.getString(KEY_SECONDARY_PHONE, "+1 555-0199") ?: "+1 555-0199"
-        set(value) = prefs.edit().putString(KEY_SECONDARY_PHONE, value).apply()
+        get() = altPhone
+        set(value) {
+            altPhone = value
+        }
 
     var allowedPackages: Set<String>
         get() = prefs.getStringSet(KEY_ALLOWED_PACKAGES, emptySet()) ?: emptySet()
@@ -46,7 +93,7 @@ class KioskPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SLEEP_ON_UNPLUG, value).apply()
 
     var currency: String
-        get() = prefs.getString(KEY_CURRENCY, "$") ?: "$"
+        get() = prefs.getString(KEY_CURRENCY, "₹") ?: "₹" // Default to ₹ INR as seen in user's GPay screenshot!
         set(value) = prefs.edit().putString(KEY_CURRENCY, value).apply()
 
     var paymentPhrase: String

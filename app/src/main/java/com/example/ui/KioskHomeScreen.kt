@@ -2,42 +2,63 @@ package com.example.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.components.AccountActivationScreen
 import com.example.ui.components.AdminSettingsSheet
 import com.example.ui.components.AllowedAppsGrid
 import com.example.ui.components.AutomotiveHudCluster
 import com.example.ui.components.DisplaySleepOverlay
 import com.example.ui.components.KioskTopBar
-import com.example.ui.components.OtpRecoveryDialog
 import com.example.ui.components.PaymentSoundboxCard
 import com.example.ui.components.PinUnlockDialog
 import com.example.ui.components.SplitResultDialog
 import com.example.ui.components.SplitScreenShortcutCard
+import com.example.ui.components.TwoWordsRecoveryDialog
+import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CockpitBlack
+import com.example.ui.theme.CockpitBorder
+import com.example.ui.theme.CockpitCard
+import com.example.ui.theme.HudCyan
 
 @Composable
 fun KioskHomeScreen(viewModel: KioskViewModel) {
+    val isActivated by viewModel.isActivated.collectAsStateWithLifecycle()
     val permittedApps by viewModel.permittedApps.collectAsStateWithLifecycle()
     val allInstalledApps by viewModel.allInstalledApps.collectAsStateWithLifecycle()
     val powerState by viewModel.powerState.collectAsStateWithLifecycle()
@@ -47,24 +68,29 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val paymentHistory by viewModel.paymentHistory.collectAsStateWithLifecycle()
     val hudTheme by viewModel.hudTheme.collectAsStateWithLifecycle()
     val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
+    val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
 
     val showPinDialog by viewModel.showPinDialog.collectAsStateWithLifecycle()
-    val showOtpDialog by viewModel.showOtpDialog.collectAsStateWithLifecycle()
+    val showTwoWordsDialog by viewModel.showTwoWordsDialog.collectAsStateWithLifecycle()
+    val recoveryWord1 by viewModel.recoveryWord1.collectAsStateWithLifecycle()
+    val recoveryWord2 by viewModel.recoveryWord2.collectAsStateWithLifecycle()
+    val isRecoveryVerified by viewModel.isRecoveryVerified.collectAsStateWithLifecycle()
+    val remainingRecoveryTimeMillis by viewModel.remainingRecoveryTimeMillis.collectAsStateWithLifecycle()
+
     val showAdminSettings by viewModel.showAdminSettings.collectAsStateWithLifecycle()
     val showSplitResult by viewModel.showSplitResultDialog.collectAsStateWithLifecycle()
     val lastSplitResult by viewModel.lastSplitResult.collectAsStateWithLifecycle()
 
-    val otpChallenge by viewModel.otpChallenge.collectAsStateWithLifecycle()
     val pinError by viewModel.pinError.collectAsStateWithLifecycle()
-    val otpError by viewModel.otpError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Intercept back button in kiosk launcher so the user cannot simply back out of the kiosk
+    // Intercept back button in kiosk launcher so user cannot exit without 8-digit password
     BackHandler {
-        // Back press requests password-protected exit
-        viewModel.requestExitKiosk()
+        if (isActivated) {
+            viewModel.requestExitKiosk()
+        }
     }
 
     LaunchedEffect(statusMessage) {
@@ -72,6 +98,16 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             snackbarHostState.showSnackbar(it)
             viewModel.clearStatusMessage()
         }
+    }
+
+    // 1. Account Activation Gate
+    if (!isActivated) {
+        AccountActivationScreen(
+            onActivate = { name, phone, altPhone, password ->
+                viewModel.activateAccount(name, phone, altPhone, password)
+            }
+        )
+        return
     }
 
     Box(
@@ -106,26 +142,69 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             ) {
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // 1. Tesla / Tata EV Head-Up Display (HUD) Instrument Cluster
+                // Notification Access Banner for GPay / UPI Auto-Chime
+                if (!isNotificationAccessGranted) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AmberGold.copy(alpha = 0.15f))
+                            .border(1.dp, AmberGold, RoundedCornerShape(12.dp))
+                            .clickable { viewModel.openNotificationAccessSettings() }
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                            .testTag("notification_access_banner")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = AmberGold,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Enable GPay / UPI Payment Chime Listener",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Tap to grant notification access so payment receipts speak automatically.",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = "ENABLE",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = AmberGold
+                            )
+                        }
+                    }
+                }
+
+                // 2. Tesla / Tata EV Head-Up Display (HUD) Instrument Cluster
                 AutomotiveHudCluster(
                     powerState = powerState,
                     currentTheme = hudTheme,
                     onThemeChange = { viewModel.setHudTheme(it) }
                 )
 
-                // 2. Uber Driver + Google Maps Split Screen Shortcut Card
+                // 3. Uber Driver + Google Maps Split Screen Shortcut Card
                 SplitScreenShortcutCard(
                     onLaunchSplitScreen = { viewModel.launchUberMapsSplitScreen() }
                 )
 
-                // 3. Allowed Apps Whitelist Grid (Hides unwanted apps)
+                // 4. Allowed Apps Whitelist Grid (Hides unwanted apps)
                 AllowedAppsGrid(
                     apps = permittedApps,
                     onAppClick = { pkg -> viewModel.launchApp(pkg) },
                     onConfigureAppsClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) }
                 )
 
-                // 4. Payment Soundbox Card ("{Tone}{ payment amount} received")
+                // 5. Payment Soundbox Card ("{Tone}{ payment amount} received")
                 PaymentSoundboxCard(
                     currency = viewModel.preferences.currency,
                     isAnnouncing = isAnnouncing,
@@ -138,36 +217,40 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             }
         }
 
-        // 5. Power goes -> Display Sleep Overlay
+        // 6. Power goes -> Display Sleep Overlay
         DisplaySleepOverlay(
             isSleeping = isDisplaySleeping,
             powerState = powerState,
             onWakeTap = { viewModel.wakeDisplay() }
         )
 
-        // 6. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)
+        // 7. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)
         if (showPinDialog) {
             PinUnlockDialog(
                 purpose = activePinPurpose,
                 errorMessage = pinError,
                 onDismiss = { viewModel.closePinDialog() },
                 onSubmitPin = { pin -> viewModel.submitPin(pin) },
-                onForgotPinClick = { viewModel.startOtpRecovery() }
+                onForgotPinClick = { viewModel.startTwoWordsRecovery() }
             )
         }
 
-        // 7. Emergency OTP Recovery Dialog with Random Words
-        if (showOtpDialog) {
-            OtpRecoveryDialog(
-                challenge = otpChallenge,
-                errorMessage = otpError,
-                onDismiss = { viewModel.closeOtpDialog() },
-                onSubmitOtp = { otp -> viewModel.submitOtp(otp) },
-                onResendOtp = { viewModel.resendOtp() }
+        // 8. 2 Random Words Recovery Dialog with Alt Phone SMS & 3-Hour Timelock
+        if (showTwoWordsDialog) {
+            TwoWordsRecoveryDialog(
+                word1 = recoveryWord1,
+                word2 = recoveryWord2,
+                altPhone = viewModel.preferences.altPhone,
+                isVerified = isRecoveryVerified,
+                remainingTimeMillis = remainingRecoveryTimeMillis,
+                onDismiss = { viewModel.closeTwoWordsRecovery() },
+                onManualSimulateSms = { sender, msg -> viewModel.simulateAltSmsVerification(sender, msg) },
+                onRegenerateWords = { viewModel.regenerateRecoveryWords() },
+                onProceedUnlock = { viewModel.proceedRecoveryUnlock() }
             )
         }
 
-        // 8. Split-Screen Launch feedback dialog
+        // 9. Split-Screen Launch feedback dialog
         if (showSplitResult && lastSplitResult != null) {
             SplitResultDialog(
                 result = lastSplitResult!!,
@@ -177,11 +260,11 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             )
         }
 
-        // 9. Admin Settings Sheet (Allowed apps, Power policies, PIN change, Soundbox config, Exit/Uninstall)
+        // 10. Admin Settings Sheet (Allowed apps, Power policies, PIN change, Soundbox config, Exit/Uninstall)
         if (showAdminSettings) {
             AdminSettingsSheet(
                 allApps = allInstalledApps,
-                currentSecondaryPhone = viewModel.preferences.secondaryPhone,
+                currentSecondaryPhone = viewModel.preferences.altPhone,
                 autoDisplayOnPlugged = viewModel.preferences.autoDisplayOnPlugged,
                 sleepOnUnplugged = viewModel.preferences.sleepOnUnplugged,
                 currency = viewModel.preferences.currency,

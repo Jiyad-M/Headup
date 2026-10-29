@@ -6,7 +6,6 @@ import android.util.Log
 import com.example.data.KioskPreferences
 import com.example.model.OtpChallenge
 import java.security.SecureRandom
-import kotlin.random.Random
 
 class KioskSecurityManager(
     private val context: Context,
@@ -29,60 +28,102 @@ class KioskSecurityManager(
     fun updatePin(newPin: String): Boolean {
         if (newPin.length == 8 && newPin.all { it.isDigit() }) {
             preferences.pin = newPin
+            // Reset recovery states upon successful password update
+            preferences.isRecoveryVerified = false
+            preferences.passwordResetUnlockTime = 0L
             return true
         }
         return false
     }
 
     fun updateSecondaryPhone(newPhone: String) {
-        preferences.secondaryPhone = newPhone
+        preferences.altPhone = newPhone
     }
 
     /**
-     * Generates a new OTP Challenge containing random words and a 6-digit numeric OTP.
+     * Generates exactly two random words for the forgotten password recovery flow.
+     * "When tap forget button a two random words displayed."
+     */
+    fun generateTwoRandomWords(): Pair<String, String> {
+        val random = SecureRandom()
+        val index1 = random.nextInt(wordDictionary.size)
+        var index2 = random.nextInt(wordDictionary.size)
+        while (index2 == index1) {
+            index2 = random.nextInt(wordDictionary.size)
+        }
+        val w1 = wordDictionary[index1]
+        val w2 = wordDictionary[index2]
+        preferences.recoveryWord1 = w1
+        preferences.recoveryWord2 = w2
+        preferences.isRecoveryVerified = false
+        preferences.passwordResetUnlockTime = 0L
+        return Pair(w1, w2)
+    }
+
+    /**
+     * Verifies that the two random words were sent from the registered alt number.
+     * Starts the 3-hour timelock countdown.
+     */
+    fun verifyTwoWordsFromAlt(sender: String, messageText: String): Boolean {
+        val w1 = preferences.recoveryWord1.trim().uppercase()
+        val w2 = preferences.recoveryWord2.trim().uppercase()
+        val altPhone = preferences.altPhone.trim()
+
+        if (w1.isEmpty() || w2.isEmpty()) return false
+
+        val isFromAlt = SmsRecoveryReceiver.matchesPhoneNumber(sender, altPhone)
+        val upperMsg = messageText.uppercase()
+        val hasWords = upperMsg.contains(w1) && upperMsg.contains(w2)
+
+        if (isFromAlt && hasWords) {
+            preferences.isRecoveryVerified = true
+            // If get change passwd after 3hours
+            preferences.passwordResetUnlockTime = System.currentTimeMillis() + (3 * 3600 * 1000L)
+            return true
+        }
+        return false
+    }
+
+    fun isRecoveryVerified(): Boolean = preferences.isRecoveryVerified
+
+    fun canChangePasswordNow(): Boolean {
+        val unlockTime = preferences.passwordResetUnlockTime
+        return unlockTime > 0L && System.currentTimeMillis() >= unlockTime
+    }
+
+    fun getRemainingLockTimeMillis(): Long {
+        val unlockTime = preferences.passwordResetUnlockTime
+        return if (unlockTime <= 0L) 0L else maxOf(0L, unlockTime - System.currentTimeMillis())
+    }
+
+    /**
+     * Legacy OTP Challenge support with words + 6-digit OTP
      */
     fun createOtpChallenge(): OtpChallenge {
         val random = SecureRandom()
-        val w1 = wordDictionary[random.nextInt(wordDictionary.size)]
-        val w2 = wordDictionary[random.nextInt(wordDictionary.size)]
-        val w3 = wordDictionary[random.nextInt(wordDictionary.size)]
+        val (w1, w2) = generateTwoRandomWords()
         val numericSalt = String.format("%04d", random.nextInt(10000))
-        val words = "$w1 - $w2 - $w3 - $numericSalt"
+        val words = "$w1 - $w2 - $numericSalt"
 
         val otp = String.format("%06d", random.nextInt(1000000))
         val challenge = OtpChallenge(
-            challengeWords = words,
+            challengeWords = "$w1 $w2",
             otpCode = otp,
-            targetPhone = preferences.secondaryPhone
+            targetPhone = preferences.altPhone
         )
         currentChallenge = challenge
-
-        // Try dispatching SMS if possible
-        sendOtpSms(challenge)
         return challenge
     }
-
-    fun getCurrentChallenge(): OtpChallenge? = currentChallenge
 
     fun verifyOtp(enteredOtp: String): Boolean {
         val challenge = currentChallenge ?: return false
         if (System.currentTimeMillis() > challenge.expiresAt) return false
         val isValid = enteredOtp.trim() == challenge.otpCode
         if (isValid) {
-            currentChallenge = null // clear upon success
+            preferences.isRecoveryVerified = true
+            preferences.passwordResetUnlockTime = System.currentTimeMillis() + (3 * 3600 * 1000L)
+            currentChallenge = null
         }
         return isValid
-    }
-
-    private fun sendOtpSms(challenge: OtpChallenge) {
-        try {
-            val smsManager: SmsManager = context.getSystemService(SmsManager::class.java)
-                ?: @Suppress("DEPRECATION") SmsManager.getDefault()
-            val message = "Kiosk Emergency Unlock Code: ${challenge.otpCode}\nChallenge: ${challenge.challengeWords}"
-            smsManager.sendTextMessage(challenge.targetPhone, null, message, null, null)
-            Log.d("KioskSecurity", "Sent unlock SMS to ${challenge.targetPhone}")
-        } catch (e: Exception) {
-            Log.w("KioskSecurity", "Could not send SMS directly (sim not present or permission denied): ${e.message}")
-        }
     }
 }

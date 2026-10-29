@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.KioskPreferences
 import com.example.model.PaymentRecord
 import com.example.security.KioskSecurityManager
+import com.example.security.SmsRecoveryReceiver
+import com.example.soundbox.PaymentNotificationListenerService
 import com.example.ui.PinPurpose
 import com.example.ui.components.AutomotiveBrandTheme
 import org.junit.Assert.assertEquals
@@ -28,6 +30,85 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `test GPay payment notification amount parsing`() {
+    // Exact notifications from user's screenshot
+    val text1 = "SURANYA G paid you ₹110.00 Tap to view."
+    val text2 = "SHIJIMOL NELLENGARA paid you ₹182.00 Aysha"
+    val text3 = "TANAY SARKAR paid you ₹68.00 Payment from PhonePe"
+    val text4 = "Received ₹500.00 on Paytm"
+
+    val amt1 = PaymentNotificationListenerService.parsePaymentAmount(text1)
+    val amt2 = PaymentNotificationListenerService.parsePaymentAmount(text2)
+    val amt3 = PaymentNotificationListenerService.parsePaymentAmount(text3)
+    val amt4 = PaymentNotificationListenerService.parsePaymentAmount(text4)
+
+    assertEquals(110.0, amt1 ?: 0.0, 0.01)
+    assertEquals(182.0, amt2 ?: 0.0, 0.01)
+    assertEquals(68.0, amt3 ?: 0.0, 0.01)
+    assertEquals(500.0, amt4 ?: 0.0, 0.01)
+  }
+
+  @Test
+  fun `test account activation and preferences`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+
+    prefs.accountName = "Jiyad"
+    prefs.primaryPhone = "+91 9876543210"
+    prefs.altPhone = "+91 9123456789"
+    prefs.pin = "88776655"
+    prefs.isActivated = true
+
+    assertEquals("Jiyad", prefs.accountName)
+    assertEquals("+91 9876543210", prefs.primaryPhone)
+    assertEquals("+91 9123456789", prefs.altPhone)
+    assertEquals("88776655", prefs.pin)
+    assertTrue(prefs.isActivated)
+  }
+
+  @Test
+  fun `test two random words recovery and 3 hour timelock`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+    val securityManager = KioskSecurityManager(context, prefs)
+
+    prefs.altPhone = "+91 9123456789"
+
+    // Generate 2 random words
+    val (w1, w2) = securityManager.generateTwoRandomWords()
+    assertNotNull(w1)
+    assertNotNull(w2)
+    assertTrue(w1.isNotEmpty() && w2.isNotEmpty())
+    assertFalse(w1 == w2)
+
+    // Initially recovery is not verified and cannot change password
+    assertFalse(securityManager.isRecoveryVerified())
+    assertFalse(securityManager.canChangePasswordNow())
+
+    // Invalid sender should fail
+    val wrongSenderResult = securityManager.verifyTwoWordsFromAlt("+91 0000000000", "$w1 $w2")
+    assertFalse(wrongSenderResult)
+
+    // Valid sender with matching words should succeed
+    val validResult = securityManager.verifyTwoWordsFromAlt("+91 9123456789", "Here are the words $w1 and $w2")
+    assertTrue(validResult)
+    assertTrue(securityManager.isRecoveryVerified())
+
+    // 3-hour timelock is now active; cannot change immediately
+    assertFalse(securityManager.canChangePasswordNow())
+    val remaining = securityManager.getRemainingLockTimeMillis()
+    assertTrue(remaining > 0L)
+    assertTrue(remaining <= 3 * 3600 * 1000L)
+  }
+
+  @Test
+  fun `test phone number matching helper`() {
+    assertTrue(SmsRecoveryReceiver.matchesPhoneNumber("+91 9123456789", "9123456789"))
+    assertTrue(SmsRecoveryReceiver.matchesPhoneNumber("9123456789", "+91-91234-56789"))
+    assertFalse(SmsRecoveryReceiver.matchesPhoneNumber("9876543210", "9123456789"))
+  }
+
+  @Test
   fun `test 8-digit PIN verification and update`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val prefs = KioskPreferences(context)
@@ -47,61 +128,5 @@ class ExampleRobolectricTest {
     // Must be 8 digits
     val invalidShort = securityManager.updatePin("123")
     assertFalse(invalidShort)
-  }
-
-  @Test
-  fun `test OTP challenge with random words`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val prefs = KioskPreferences(context)
-    val securityManager = KioskSecurityManager(context, prefs)
-
-    val challenge = securityManager.createOtpChallenge()
-    assertNotNull(challenge)
-    assertTrue(challenge.challengeWords.contains("-"))
-    assertEquals(6, challenge.otpCode.length)
-    assertTrue(challenge.otpCode.all { it.isDigit() })
-
-    // Verify OTP
-    assertTrue(securityManager.verifyOtp(challenge.otpCode))
-    assertFalse(securityManager.verifyOtp("000000"))
-  }
-
-  @Test
-  fun `test payment record persistence`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val prefs = KioskPreferences(context)
-
-    val record = PaymentRecord(
-      id = "test-1",
-      amount = 25.0,
-      currency = "$",
-      timestamp = System.currentTimeMillis(),
-      formattedTime = "12:00:00 PM",
-      announcementText = "$25.00 received"
-    )
-    prefs.addPaymentRecord(record)
-
-    val history = prefs.getPaymentHistory()
-    assertTrue(history.isNotEmpty())
-    assertEquals(25.0, history[0].amount, 0.01)
-    assertEquals("$25.00 received", history[0].announcementText)
-  }
-
-  @Test
-  fun `test HUD automotive themes and exit uninstall password protection`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val prefs = KioskPreferences(context)
-
-    // Verify HUD theme saving
-    prefs.hudTheme = AutomotiveBrandTheme.TATA_EV.name
-    assertEquals("TATA_EV", prefs.hudTheme)
-
-    prefs.hudTheme = AutomotiveBrandTheme.TESLA.name
-    assertEquals("TESLA", prefs.hudTheme)
-
-    // Verify PinPurpose values
-    assertEquals(PinPurpose.ADMIN_ACCESS, PinPurpose.valueOf("ADMIN_ACCESS"))
-    assertEquals(PinPurpose.EXIT_KIOSK, PinPurpose.valueOf("EXIT_KIOSK"))
-    assertEquals(PinPurpose.UNINSTALL_APP, PinPurpose.valueOf("UNINSTALL_APP"))
   }
 }

@@ -2,8 +2,12 @@ package com.example.ui
 
 import android.app.Activity
 import android.app.Application
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.apps.AppManager
@@ -15,6 +19,8 @@ import com.example.model.PaymentRecord
 import com.example.model.PowerState
 import com.example.power.PowerMonitor
 import com.example.security.KioskSecurityManager
+import com.example.security.SmsRecoveryReceiver
+import com.example.soundbox.PaymentNotificationListenerService
 import com.example.soundbox.PaymentSoundboxManager
 import com.example.ui.components.AutomotiveBrandTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +45,9 @@ class KioskViewModel(
     val soundboxManager = PaymentSoundboxManager(application, preferences)
     val powerMonitor = PowerMonitor(activity, preferences)
 
+    private val _isActivated = MutableStateFlow(preferences.isActivated)
+    val isActivated: StateFlow<Boolean> = _isActivated.asStateFlow()
+
     private val _permittedApps = MutableStateFlow<List<AppItem>>(emptyList())
     val permittedApps: StateFlow<List<AppItem>> = _permittedApps.asStateFlow()
 
@@ -54,8 +63,20 @@ class KioskViewModel(
     private val _activePinPurpose = MutableStateFlow(PinPurpose.ADMIN_ACCESS)
     val activePinPurpose: StateFlow<PinPurpose> = _activePinPurpose.asStateFlow()
 
-    private val _showOtpDialog = MutableStateFlow(false)
-    val showOtpDialog: StateFlow<Boolean> = _showOtpDialog.asStateFlow()
+    private val _showTwoWordsDialog = MutableStateFlow(false)
+    val showTwoWordsDialog: StateFlow<Boolean> = _showTwoWordsDialog.asStateFlow()
+
+    private val _recoveryWord1 = MutableStateFlow(preferences.recoveryWord1)
+    val recoveryWord1: StateFlow<String> = _recoveryWord1.asStateFlow()
+
+    private val _recoveryWord2 = MutableStateFlow(preferences.recoveryWord2)
+    val recoveryWord2: StateFlow<String> = _recoveryWord2.asStateFlow()
+
+    private val _isRecoveryVerified = MutableStateFlow(preferences.isRecoveryVerified)
+    val isRecoveryVerified: StateFlow<Boolean> = _isRecoveryVerified.asStateFlow()
+
+    private val _remainingRecoveryTimeMillis = MutableStateFlow(securityManager.getRemainingLockTimeMillis())
+    val remainingRecoveryTimeMillis: StateFlow<Long> = _remainingRecoveryTimeMillis.asStateFlow()
 
     private val _showAdminSettings = MutableStateFlow(false)
     val showAdminSettings: StateFlow<Boolean> = _showAdminSettings.asStateFlow()
@@ -66,20 +87,17 @@ class KioskViewModel(
     private val _lastSplitResult = MutableStateFlow<SplitLaunchResult?>(null)
     val lastSplitResult: StateFlow<SplitLaunchResult?> = _lastSplitResult.asStateFlow()
 
-    private val _otpChallenge = MutableStateFlow<OtpChallenge?>(null)
-    val otpChallenge: StateFlow<OtpChallenge?> = _otpChallenge.asStateFlow()
-
     private val _pinError = MutableStateFlow<String?>(null)
     val pinError: StateFlow<String?> = _pinError.asStateFlow()
-
-    private val _otpError = MutableStateFlow<String?>(null)
-    val otpError: StateFlow<String?> = _otpError.asStateFlow()
 
     private val _paymentHistory = MutableStateFlow<List<PaymentRecord>>(emptyList())
     val paymentHistory: StateFlow<List<PaymentRecord>> = _paymentHistory.asStateFlow()
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    private val _isNotificationAccessGranted = MutableStateFlow(checkNotificationAccessGranted())
+    val isNotificationAccessGranted: StateFlow<Boolean> = _isNotificationAccessGranted.asStateFlow()
 
     private val _hudTheme = MutableStateFlow(
         try {
@@ -99,6 +117,63 @@ class KioskViewModel(
         powerMonitor.startMonitoring()
         refreshApps()
         loadPaymentHistory()
+
+        // Hook real-time payment notification listener
+        PaymentNotificationListenerService.onPaymentReceivedListener = { amount, rawText ->
+            loadPaymentHistory()
+            _statusMessage.value = "Payment Received: ₹$amount"
+        }
+
+        // Hook real-time incoming SMS recovery listener
+        SmsRecoveryReceiver.onSmsRecoveryVerified = { sender, message ->
+            _isRecoveryVerified.value = true
+            _remainingRecoveryTimeMillis.value = securityManager.getRemainingLockTimeMillis()
+            _statusMessage.value = "Recovery SMS verified from $sender! 3-Hour timelock initiated."
+        }
+    }
+
+    fun checkNotificationAccessGranted(): Boolean {
+        return try {
+            val enabledListeners = NotificationManagerCompat.getEnabledListenerPackages(activity)
+            enabledListeners.contains(activity.packageName)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun openNotificationAccessSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(intent)
+        } catch (_: Exception) {
+            _statusMessage.value = "Cannot open notification settings automatically"
+        }
+    }
+
+    fun activateAccount(name: String, phone: String, altPhone: String, password: String) {
+        preferences.accountName = name
+        preferences.primaryPhone = phone
+        preferences.altPhone = altPhone
+        preferences.pin = password
+        preferences.isActivated = true
+        _isActivated.value = true
+        _statusMessage.value = "Kiosk Activated for $name! Prompting launcher selection..."
+
+        // Prompt user to set as default launcher to switch from original Samsung One UI
+        promptSetDefaultLauncher()
+    }
+
+    fun promptSetDefaultLauncher() {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(Intent.createChooser(intent, "Select Kiosk Launcher to replace Samsung One UI"))
+        } catch (e: Exception) {
+            _statusMessage.value = "Open Settings -> Default Apps -> Home App to select Kiosk Launcher"
+        }
     }
 
     fun setHudTheme(theme: AutomotiveBrandTheme) {
@@ -166,7 +241,7 @@ class KioskViewModel(
 
             when (_activePinPurpose.value) {
                 PinPurpose.EXIT_KIOSK -> {
-                    _statusMessage.value = "PIN Verified. Exiting Kiosk Mode..."
+                    _statusMessage.value = "PIN Verified. Exiting to Samsung Home..."
                     performExitToLauncher()
                 }
                 PinPurpose.UNINSTALL_APP -> {
@@ -207,49 +282,48 @@ class KioskViewModel(
         }
     }
 
-    fun startOtpRecovery() {
+    /**
+     * Requirement 4:
+     * When tap forget button a two random words displayed.
+     * If the word received from alt number via SMS, change password after 3 hours.
+     */
+    fun startTwoWordsRecovery() {
         _showPinDialog.value = false
-        val challenge = securityManager.createOtpChallenge()
-        _otpChallenge.value = challenge
-        _otpError.value = null
-        _showOtpDialog.value = true
+        val (w1, w2) = securityManager.generateTwoRandomWords()
+        _recoveryWord1.value = w1
+        _recoveryWord2.value = w2
+        _isRecoveryVerified.value = preferences.isRecoveryVerified
+        _remainingRecoveryTimeMillis.value = securityManager.getRemainingLockTimeMillis()
+        _showTwoWordsDialog.value = true
     }
 
-    fun closeOtpDialog() {
-        _showOtpDialog.value = false
-        _otpError.value = null
+    fun closeTwoWordsRecovery() {
+        _showTwoWordsDialog.value = false
     }
 
-    fun submitOtp(otp: String) {
-        if (securityManager.verifyOtp(otp)) {
-            _showOtpDialog.value = false
-            _otpError.value = null
+    fun regenerateRecoveryWords() {
+        val (w1, w2) = securityManager.generateTwoRandomWords()
+        _recoveryWord1.value = w1
+        _recoveryWord2.value = w2
+        _isRecoveryVerified.value = false
+        _remainingRecoveryTimeMillis.value = 0L
+    }
 
-            when (_activePinPurpose.value) {
-                PinPurpose.EXIT_KIOSK -> {
-                    _statusMessage.value = "Emergency OTP Verified. Exiting Kiosk..."
-                    performExitToLauncher()
-                }
-                PinPurpose.UNINSTALL_APP -> {
-                    _statusMessage.value = "Emergency OTP Verified. Launching Uninstaller..."
-                    performUninstallApp()
-                }
-                PinPurpose.ADMIN_ACCESS -> {
-                    _isAdminAuthenticated.value = true
-                    _showAdminSettings.value = true
-                    _statusMessage.value = "Emergency OTP verified! Admin unlocked."
-                }
-            }
-        } else {
-            _otpError.value = "Invalid OTP code. Please check secondary phone."
+    fun simulateAltSmsVerification(sender: String, messageText: String): Boolean {
+        val ok = securityManager.verifyTwoWordsFromAlt(sender, messageText)
+        if (ok) {
+            _isRecoveryVerified.value = true
+            _remainingRecoveryTimeMillis.value = securityManager.getRemainingLockTimeMillis()
+            _statusMessage.value = "SMS words verified! 3-hour timelock countdown active."
         }
+        return ok
     }
 
-    fun resendOtp() {
-        val challenge = securityManager.createOtpChallenge()
-        _otpChallenge.value = challenge
-        _otpError.value = null
-        _statusMessage.value = "New OTP code generated and sent!"
+    fun proceedRecoveryUnlock() {
+        _showTwoWordsDialog.value = false
+        _isAdminAuthenticated.value = true
+        _showAdminSettings.value = true
+        _statusMessage.value = "Kiosk unlocked via Alt Number verification."
     }
 
     fun closeAdminSettings() {
@@ -264,6 +338,14 @@ class KioskViewModel(
     }
 
     fun updatePin(newPin: String): Boolean {
+        // Enforce 3-hour rule if recovering, or normal update if authenticated
+        if (preferences.isRecoveryVerified && !securityManager.canChangePasswordNow()) {
+            val remain = securityManager.getRemainingLockTimeMillis()
+            val mins = (remain / (1000 * 60))
+            _statusMessage.value = "Security timelock active: Cannot change password for another $mins minutes (3-hour rule)."
+            return false
+        }
+
         val ok = securityManager.updatePin(newPin)
         if (ok) {
             _statusMessage.value = "8-digit PIN updated successfully"
@@ -273,7 +355,7 @@ class KioskViewModel(
 
     fun updateSecondaryPhone(newPhone: String) {
         securityManager.updateSecondaryPhone(newPhone)
-        _statusMessage.value = "Secondary phone updated"
+        _statusMessage.value = "Alt phone updated"
     }
 
     fun updatePowerSettings(autoDisplayOn: Boolean, sleepOnUnplug: Boolean) {
@@ -297,5 +379,7 @@ class KioskViewModel(
         super.onCleared()
         powerMonitor.stopMonitoring()
         soundboxManager.release()
+        PaymentNotificationListenerService.onPaymentReceivedListener = null
+        SmsRecoveryReceiver.onSmsRecoveryVerified = null
     }
 }
