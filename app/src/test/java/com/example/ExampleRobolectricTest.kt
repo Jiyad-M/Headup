@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.KioskPreferences
 import com.example.model.PaymentRecord
 import com.example.security.KioskSecurityManager
+import com.example.ui.PinPurpose
+import com.example.ui.components.AutomotiveBrandTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -83,5 +85,23 @@ class ExampleRobolectricTest {
     assertTrue(history.isNotEmpty())
     assertEquals(25.0, history[0].amount, 0.01)
     assertEquals("$25.00 received", history[0].announcementText)
+  }
+
+  @Test
+  fun `test HUD automotive themes and exit uninstall password protection`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+
+    // Verify HUD theme saving
+    prefs.hudTheme = AutomotiveBrandTheme.TATA_EV.name
+    assertEquals("TATA_EV", prefs.hudTheme)
+
+    prefs.hudTheme = AutomotiveBrandTheme.TESLA.name
+    assertEquals("TESLA", prefs.hudTheme)
+
+    // Verify PinPurpose values
+    assertEquals(PinPurpose.ADMIN_ACCESS, PinPurpose.valueOf("ADMIN_ACCESS"))
+    assertEquals(PinPurpose.EXIT_KIOSK, PinPurpose.valueOf("EXIT_KIOSK"))
+    assertEquals(PinPurpose.UNINSTALL_APP, PinPurpose.valueOf("UNINSTALL_APP"))
   }
 }

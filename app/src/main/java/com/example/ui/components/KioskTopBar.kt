@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -37,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -46,6 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.PowerState
 import com.example.ui.theme.AmberGold
+import com.example.ui.theme.CockpitBlack
+import com.example.ui.theme.CockpitBorder
+import com.example.ui.theme.CockpitSurface
 import com.example.ui.theme.EmeraldGreen
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.Slate700
@@ -60,8 +63,10 @@ import java.util.Locale
 fun KioskTopBar(
     powerState: PowerState,
     isAnnouncing: Boolean,
+    currentTheme: AutomotiveBrandTheme = AutomotiveBrandTheme.TESLA,
     onLockClick: () -> Unit,
     onSoundboxClick: () -> Unit,
+    onExitClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var currentTime by remember { mutableStateOf("") }
@@ -82,13 +87,13 @@ fun KioskTopBar(
         modifier = modifier
             .fillMaxWidth()
             .testTag("kiosk_top_bar"),
-        color = Slate900.copy(alpha = 0.95f),
+        color = CockpitSurface.copy(alpha = 0.95f),
         tonalElevation = 6.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -101,35 +106,39 @@ fun KioskTopBar(
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp
                     ),
-                    color = NeonCyan
+                    color = currentTheme.primaryColor
                 )
                 Text(
-                    text = currentDate.ifEmpty { "Kiosk Launcher" },
-                    style = MaterialTheme.typography.labelSmall,
+                    text = when (currentTheme) {
+                        AutomotiveBrandTheme.TESLA -> "TESLA COCKPIT"
+                        AutomotiveBrandTheme.TATA_EV -> "TATA EV CLUSTER"
+                        AutomotiveBrandTheme.MONO_HUD -> "HUD WINDSHIELD"
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.5.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             // Center: Power Indicator Pill
-            PowerStatusPill(powerState = powerState)
+            PowerStatusPill(powerState = powerState, primaryColor = currentTheme.primaryColor)
 
-            // Right: Soundbox Quick Button + Admin Lock Button
+            // Right: Soundbox Quick Button + Password-Protected Exit & Admin
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Soundbox Status
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isAnnouncing) EmeraldGreen.copy(alpha = 0.2f) else Slate800)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isAnnouncing) currentTheme.primaryColor.copy(alpha = 0.2f) else CockpitBlack)
                         .border(
                             1.dp,
-                            if (isAnnouncing) EmeraldGreen else Slate700,
-                            RoundedCornerShape(12.dp)
+                            if (isAnnouncing) currentTheme.primaryColor else CockpitBorder,
+                            RoundedCornerShape(10.dp)
                         )
                         .clickable { onSoundboxClick() }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                         .testTag("soundbox_header_btn")
                 ) {
                     Row(
@@ -139,32 +148,60 @@ fun KioskTopBar(
                         Icon(
                             imageVector = if (isAnnouncing) Icons.Default.RecordVoiceOver else Icons.Default.VolumeUp,
                             contentDescription = "Soundbox",
-                            tint = if (isAnnouncing) EmeraldGreen else NeonCyan,
-                            modifier = Modifier.size(18.dp)
+                            tint = if (isAnnouncing) currentTheme.primaryColor else Color.White,
+                            modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = if (isAnnouncing) "Chime..." else "Soundbox",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = if (isAnnouncing) EmeraldGreen else MaterialTheme.colorScheme.onSurface
+                            text = if (isAnnouncing) "Chime..." else "Chime",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium, fontSize = 11.sp),
+                            color = if (isAnnouncing) currentTheme.primaryColor else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
 
-                // Kiosk Admin Lock
+                // Password-Protected Exit Button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(CockpitBlack)
+                        .border(1.dp, CockpitBorder, RoundedCornerShape(10.dp))
+                        .clickable { onExitClick() }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .testTag("exit_kiosk_header_btn")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ExitToApp,
+                            contentDescription = "Exit Kiosk",
+                            tint = AmberGold,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Exit",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 11.sp),
+                            color = AmberGold
+                        )
+                    }
+                }
+
+                // Kiosk Admin Settings Lock Button
                 IconButton(
                     onClick = onLockClick,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(Slate800)
-                        .border(1.dp, Slate700, CircleShape)
+                        .background(CockpitBlack)
+                        .border(1.dp, CockpitBorder, CircleShape)
                         .testTag("admin_lock_btn")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = "Admin Unlock / Settings",
-                        tint = AmberGold,
-                        modifier = Modifier.size(18.dp)
+                        tint = currentTheme.primaryColor,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -175,41 +212,42 @@ fun KioskTopBar(
 @Composable
 fun PowerStatusPill(
     powerState: PowerState,
+    primaryColor: Color = NeonCyan,
     modifier: Modifier = Modifier
 ) {
     val pillBgColor by animateColorAsState(
-        targetValue = if (powerState.isPlugged) EmeraldGreen.copy(alpha = 0.18f) else Slate800,
+        targetValue = if (powerState.isPlugged) primaryColor.copy(alpha = 0.18f) else CockpitBlack,
         label = "pill_bg"
     )
     val pillBorderColor by animateColorAsState(
-        targetValue = if (powerState.isPlugged) EmeraldGreen.copy(alpha = 0.8f) else Slate700,
+        targetValue = if (powerState.isPlugged) primaryColor.copy(alpha = 0.8f) else CockpitBorder,
         label = "pill_border"
     )
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(pillBgColor)
-            .border(1.dp, pillBorderColor, RoundedCornerShape(20.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .border(1.dp, pillBorderColor, RoundedCornerShape(16.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
             .testTag("power_status_pill"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Icon(
             imageVector = if (powerState.isPlugged) Icons.Default.Power else if (powerState.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryStd,
             contentDescription = "Power Status",
-            tint = if (powerState.isPlugged) EmeraldGreen else AmberGold,
-            modifier = Modifier.size(16.dp)
+            tint = if (powerState.isPlugged) primaryColor else AmberGold,
+            modifier = Modifier.size(14.dp)
         )
         Text(
-            text = if (powerState.isPlugged) "PLUGGED • SCREEN ON" else "${powerState.batteryLevel}% • AUTO-SLEEP",
+            text = if (powerState.isPlugged) "CHARGING • SCREEN ON" else "${powerState.batteryLevel}% • AUTO-SLEEP",
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                letterSpacing = 0.5.sp
+                fontSize = 10.sp,
+                letterSpacing = 0.4.sp
             ),
-            color = if (powerState.isPlugged) EmeraldGreen else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (powerState.isPlugged) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

@@ -2,6 +2,8 @@ package com.example.ui
 
 import android.app.Activity
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.apps.AppManager
@@ -14,14 +16,21 @@ import com.example.model.PowerState
 import com.example.power.PowerMonitor
 import com.example.security.KioskSecurityManager
 import com.example.soundbox.PaymentSoundboxManager
+import com.example.ui.components.AutomotiveBrandTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class PinPurpose {
+    ADMIN_ACCESS,
+    EXIT_KIOSK,
+    UNINSTALL_APP
+}
+
 class KioskViewModel(
     application: Application,
-    activity: Activity
+    private val activity: Activity
 ) : AndroidViewModel(application) {
 
     val preferences = KioskPreferences(application)
@@ -41,6 +50,9 @@ class KioskViewModel(
 
     private val _showPinDialog = MutableStateFlow(false)
     val showPinDialog: StateFlow<Boolean> = _showPinDialog.asStateFlow()
+
+    private val _activePinPurpose = MutableStateFlow(PinPurpose.ADMIN_ACCESS)
+    val activePinPurpose: StateFlow<PinPurpose> = _activePinPurpose.asStateFlow()
 
     private val _showOtpDialog = MutableStateFlow(false)
     val showOtpDialog: StateFlow<Boolean> = _showOtpDialog.asStateFlow()
@@ -69,6 +81,15 @@ class KioskViewModel(
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    private val _hudTheme = MutableStateFlow(
+        try {
+            AutomotiveBrandTheme.valueOf(preferences.hudTheme)
+        } catch (_: Exception) {
+            AutomotiveBrandTheme.TESLA
+        }
+    )
+    val hudTheme: StateFlow<AutomotiveBrandTheme> = _hudTheme.asStateFlow()
+
     val powerState: StateFlow<PowerState> = powerMonitor.powerState
     val isDisplaySleeping: StateFlow<Boolean> = powerMonitor.isDisplaySleeping
     val isAnnouncingPayment: StateFlow<Boolean> = soundboxManager.isAnnouncing
@@ -78,6 +99,11 @@ class KioskViewModel(
         powerMonitor.startMonitoring()
         refreshApps()
         loadPaymentHistory()
+    }
+
+    fun setHudTheme(theme: AutomotiveBrandTheme) {
+        _hudTheme.value = theme
+        preferences.hudTheme = theme.name
     }
 
     fun refreshApps() {
@@ -98,9 +124,6 @@ class KioskViewModel(
         }
     }
 
-    /**
-     * Programmatically launch both Uber Driver and Google Maps in split-screen mode
-     */
     fun launchUberMapsSplitScreen() {
         val result = appManager.launchSplitScreenUberAndMaps()
         _lastSplitResult.value = result
@@ -117,7 +140,8 @@ class KioskViewModel(
         }
     }
 
-    fun openPinDialog() {
+    fun openPinDialog(purpose: PinPurpose = PinPurpose.ADMIN_ACCESS) {
+        _activePinPurpose.value = purpose
         _pinError.value = null
         _showPinDialog.value = true
     }
@@ -127,14 +151,59 @@ class KioskViewModel(
         _pinError.value = null
     }
 
+    fun requestExitKiosk() {
+        openPinDialog(PinPurpose.EXIT_KIOSK)
+    }
+
+    fun requestUninstallKiosk() {
+        openPinDialog(PinPurpose.UNINSTALL_APP)
+    }
+
     fun submitPin(pin: String) {
         if (securityManager.verifyPin(pin)) {
-            _isAdminAuthenticated.value = true
             _showPinDialog.value = false
             _pinError.value = null
-            _showAdminSettings.value = true
+
+            when (_activePinPurpose.value) {
+                PinPurpose.EXIT_KIOSK -> {
+                    _statusMessage.value = "PIN Verified. Exiting Kiosk Mode..."
+                    performExitToLauncher()
+                }
+                PinPurpose.UNINSTALL_APP -> {
+                    _statusMessage.value = "PIN Verified. Launching Uninstaller..."
+                    performUninstallApp()
+                }
+                PinPurpose.ADMIN_ACCESS -> {
+                    _isAdminAuthenticated.value = true
+                    _showAdminSettings.value = true
+                }
+            }
         } else {
-            _pinError.value = "Incorrect 8-digit PIN. Please try again or use Emergency OTP."
+            _pinError.value = "Incorrect 8-digit password. Authorization failed."
+        }
+    }
+
+    fun performExitToLauncher() {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(Intent.createChooser(intent, "Choose Home Screen"))
+        } catch (_: Exception) {
+            _statusMessage.value = "Could not open launcher selector"
+        }
+    }
+
+    fun performUninstallApp() {
+        try {
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = Uri.parse("package:${activity.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            _statusMessage.value = "Cannot open uninstaller: ${e.message}"
         }
     }
 
@@ -153,13 +222,26 @@ class KioskViewModel(
 
     fun submitOtp(otp: String) {
         if (securityManager.verifyOtp(otp)) {
-            _isAdminAuthenticated.value = true
             _showOtpDialog.value = false
             _otpError.value = null
-            _showAdminSettings.value = true
-            _statusMessage.value = "Emergency OTP verified! Admin unlocked."
+
+            when (_activePinPurpose.value) {
+                PinPurpose.EXIT_KIOSK -> {
+                    _statusMessage.value = "Emergency OTP Verified. Exiting Kiosk..."
+                    performExitToLauncher()
+                }
+                PinPurpose.UNINSTALL_APP -> {
+                    _statusMessage.value = "Emergency OTP Verified. Launching Uninstaller..."
+                    performUninstallApp()
+                }
+                PinPurpose.ADMIN_ACCESS -> {
+                    _isAdminAuthenticated.value = true
+                    _showAdminSettings.value = true
+                    _statusMessage.value = "Emergency OTP verified! Admin unlocked."
+                }
+            }
         } else {
-            _otpError.value = "Invalid OTP code. Please check secondary phone or resend."
+            _otpError.value = "Invalid OTP code. Please check secondary phone."
         }
     }
 

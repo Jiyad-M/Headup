@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.AdminSettingsSheet
 import com.example.ui.components.AllowedAppsGrid
+import com.example.ui.components.AutomotiveHudCluster
 import com.example.ui.components.DisplaySleepOverlay
 import com.example.ui.components.KioskTopBar
 import com.example.ui.components.OtpRecoveryDialog
@@ -33,7 +34,7 @@ import com.example.ui.components.PaymentSoundboxCard
 import com.example.ui.components.PinUnlockDialog
 import com.example.ui.components.SplitResultDialog
 import com.example.ui.components.SplitScreenShortcutCard
-import com.example.ui.theme.Slate950
+import com.example.ui.theme.CockpitBlack
 
 @Composable
 fun KioskHomeScreen(viewModel: KioskViewModel) {
@@ -44,6 +45,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val isAnnouncing by viewModel.isAnnouncingPayment.collectAsStateWithLifecycle()
     val lastAnnouncedText by viewModel.lastAnnouncedText.collectAsStateWithLifecycle()
     val paymentHistory by viewModel.paymentHistory.collectAsStateWithLifecycle()
+    val hudTheme by viewModel.hudTheme.collectAsStateWithLifecycle()
+    val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
 
     val showPinDialog by viewModel.showPinDialog.collectAsStateWithLifecycle()
     val showOtpDialog by viewModel.showOtpDialog.collectAsStateWithLifecycle()
@@ -60,7 +63,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
 
     // Intercept back button in kiosk launcher so the user cannot simply back out of the kiosk
     BackHandler {
-        // In kiosk mode, back button remains on home launcher screen
+        // Back press requests password-protected exit
+        viewModel.requestExitKiosk()
     }
 
     LaunchedEffect(statusMessage) {
@@ -73,19 +77,21 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Slate950)
+            .background(CockpitBlack)
             .safeDrawingPadding()
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = Slate950,
+            containerColor = CockpitBlack,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 KioskTopBar(
                     powerState = powerState,
                     isAnnouncing = isAnnouncing,
-                    onLockClick = { viewModel.openPinDialog() },
-                    onSoundboxClick = { viewModel.openPinDialog() }
+                    currentTheme = hudTheme,
+                    onLockClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
+                    onSoundboxClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
+                    onExitClick = { viewModel.requestExitKiosk() }
                 )
             }
         ) { paddingValues ->
@@ -100,19 +106,26 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             ) {
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // 1. Uber Driver + Google Maps Split Screen Shortcut Card
+                // 1. Tesla / Tata EV Head-Up Display (HUD) Instrument Cluster
+                AutomotiveHudCluster(
+                    powerState = powerState,
+                    currentTheme = hudTheme,
+                    onThemeChange = { viewModel.setHudTheme(it) }
+                )
+
+                // 2. Uber Driver + Google Maps Split Screen Shortcut Card
                 SplitScreenShortcutCard(
                     onLaunchSplitScreen = { viewModel.launchUberMapsSplitScreen() }
                 )
 
-                // 2. Allowed Apps Whitelist Grid (Hides unwanted apps)
+                // 3. Allowed Apps Whitelist Grid (Hides unwanted apps)
                 AllowedAppsGrid(
                     apps = permittedApps,
                     onAppClick = { pkg -> viewModel.launchApp(pkg) },
-                    onConfigureAppsClick = { viewModel.openPinDialog() }
+                    onConfigureAppsClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) }
                 )
 
-                // 3. Payment Soundbox Card ("{Tone}{ payment amount} received")
+                // 4. Payment Soundbox Card ("{Tone}{ payment amount} received")
                 PaymentSoundboxCard(
                     currency = viewModel.preferences.currency,
                     isAnnouncing = isAnnouncing,
@@ -125,16 +138,17 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             }
         }
 
-        // 4. Power goes -> Display Sleep Overlay
+        // 5. Power goes -> Display Sleep Overlay
         DisplaySleepOverlay(
             isSleeping = isDisplaySleeping,
             powerState = powerState,
             onWakeTap = { viewModel.wakeDisplay() }
         )
 
-        // 5. 8-digit PIN Unlock Dialog
+        // 6. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)
         if (showPinDialog) {
             PinUnlockDialog(
+                purpose = activePinPurpose,
                 errorMessage = pinError,
                 onDismiss = { viewModel.closePinDialog() },
                 onSubmitPin = { pin -> viewModel.submitPin(pin) },
@@ -142,7 +156,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             )
         }
 
-        // 6. Emergency OTP Recovery Dialog with Random Words
+        // 7. Emergency OTP Recovery Dialog with Random Words
         if (showOtpDialog) {
             OtpRecoveryDialog(
                 challenge = otpChallenge,
@@ -153,7 +167,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             )
         }
 
-        // 7. Split-Screen Launch feedback dialog
+        // 8. Split-Screen Launch feedback dialog
         if (showSplitResult && lastSplitResult != null) {
             SplitResultDialog(
                 result = lastSplitResult!!,
@@ -163,7 +177,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             )
         }
 
-        // 8. Admin Settings Sheet (Allowed apps, Power policies, PIN change, Soundbox config)
+        // 9. Admin Settings Sheet (Allowed apps, Power policies, PIN change, Soundbox config, Exit/Uninstall)
         if (showAdminSettings) {
             AdminSettingsSheet(
                 allApps = allInstalledApps,
@@ -172,12 +186,22 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 sleepOnUnplugged = viewModel.preferences.sleepOnUnplugged,
                 currency = viewModel.preferences.currency,
                 paymentHistory = paymentHistory,
+                currentTheme = hudTheme,
+                onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },
                 onUpdatePin = { newPin -> viewModel.updatePin(newPin) },
                 onUpdateSecondaryPhone = { phone -> viewModel.updateSecondaryPhone(phone) },
                 onUpdatePowerSettings = { disp, sleep -> viewModel.updatePowerSettings(disp, sleep) },
                 onUpdateCurrency = { curr -> viewModel.updateCurrency(curr) },
                 onTestAnnouncement = { amt -> viewModel.announcePayment(amt) },
+                onRequestExit = {
+                    viewModel.closeAdminSettings()
+                    viewModel.requestExitKiosk()
+                },
+                onRequestUninstall = {
+                    viewModel.closeAdminSettings()
+                    viewModel.requestUninstallKiosk()
+                },
                 onClose = { viewModel.closeAdminSettings() }
             )
         }

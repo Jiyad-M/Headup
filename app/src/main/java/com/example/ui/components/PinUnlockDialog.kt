@@ -47,11 +47,13 @@ import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CrimsonRed
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.Slate700
+import com.example.ui.PinPurpose
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
 
 @Composable
 fun PinUnlockDialog(
+    purpose: PinPurpose = PinPurpose.ADMIN_ACCESS,
     errorMessage: String?,
     onDismiss: () -> Unit,
     onSubmitPin: (String) -> Unit,
@@ -123,15 +125,28 @@ fun PinUnlockDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                val titleText = when (purpose) {
+                    PinPurpose.EXIT_KIOSK -> "Authorize Kiosk Exit"
+                    PinPurpose.UNINSTALL_APP -> "Authorize App Uninstall"
+                    PinPurpose.ADMIN_ACCESS -> "Admin Kiosk Unlock"
+                }
+
+                val subtitleText = when (purpose) {
+                    PinPurpose.EXIT_KIOSK -> "Enter 8-digit password to leave kiosk and select default launcher."
+                    PinPurpose.UNINSTALL_APP -> "Enter 8-digit password to confirm uninstalling the kiosk application."
+                    PinPurpose.ADMIN_ACCESS -> "Enter 8-digit Kiosk Password to access settings and whitelist."
+                }
+
                 Text(
-                    text = "Admin Kiosk Unlock",
+                    text = titleText,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = Color.White
                 )
 
                 Text(
-                    text = "Enter 8-digit Kiosk Password",
+                    text = subtitleText,
                     style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 

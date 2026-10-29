@@ -25,16 +25,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,13 +72,22 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.model.AppItem
 import com.example.model.PaymentRecord
 import com.example.ui.theme.AmberGold
+import com.example.ui.theme.CockpitBlack
+import com.example.ui.theme.CockpitBorder
+import com.example.ui.theme.CockpitCard
+import com.example.ui.theme.CockpitSurface
 import com.example.ui.theme.CrimsonRed
 import com.example.ui.theme.EmeraldGreen
+import com.example.ui.theme.HudBronze
+import com.example.ui.theme.HudCyan
+import com.example.ui.theme.HudMint
+import com.example.ui.theme.HudOrange
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.Slate700
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
 import com.example.ui.theme.Slate950
+import com.example.ui.theme.TeslaRed
 
 @Composable
 fun AdminSettingsSheet(
@@ -87,17 +97,20 @@ fun AdminSettingsSheet(
     sleepOnUnplugged: Boolean,
     currency: String,
     paymentHistory: List<PaymentRecord>,
+    currentTheme: AutomotiveBrandTheme,
+    onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onUpdatePin: (String) -> Boolean,
     onUpdateSecondaryPhone: (String) -> Unit,
     onUpdatePowerSettings: (Boolean, Boolean) -> Unit,
     onUpdateCurrency: (String) -> Unit,
     onTestAnnouncement: (Double) -> Unit,
+    onRequestExit: () -> Unit,
+    onRequestUninstall: () -> Unit,
     onClose: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Allowed Apps", "Power & Screen", "Security & PIN", "Soundbox")
-    val context = LocalContext.current
+    val tabs = listOf("Allowed Apps", "HUD & Cockpit", "Power & Screen", "Security & Exit", "Soundbox")
 
     Dialog(
         onDismissRequest = onClose,
@@ -107,14 +120,14 @@ fun AdminSettingsSheet(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("admin_settings_screen"),
-            color = Slate950
+            color = CockpitBlack
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Slate900)
+                        .background(CockpitSurface)
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -127,27 +140,27 @@ fun AdminSettingsSheet(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(NeonCyan.copy(alpha = 0.2f)),
+                                .background(currentTheme.primaryColor.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Shield,
                                 contentDescription = null,
-                                tint = NeonCyan,
+                                tint = currentTheme.primaryColor,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
 
                         Column {
                             Text(
-                                text = "Admin Kiosk Controls",
+                                text = "Kiosk Cockpit Controls",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
                             Text(
-                                text = "Authenticated Mode",
+                                text = "Admin Authenticated Mode",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = EmeraldGreen
+                                color = currentTheme.primaryColor
                             )
                         }
                     }
@@ -164,8 +177,8 @@ fun AdminSettingsSheet(
                 // Tabs
                 ScrollableTabRow(
                     selectedTabIndex = selectedTab,
-                    containerColor = Slate900,
-                    contentColor = NeonCyan,
+                    containerColor = CockpitSurface,
+                    contentColor = currentTheme.primaryColor,
                     edgePadding = 16.dp
                 ) {
                     tabs.forEachIndexed { index, title ->
@@ -183,7 +196,7 @@ fun AdminSettingsSheet(
                     }
                 }
 
-                HorizontalDivider(color = Slate800)
+                HorizontalDivider(color = CockpitBorder)
 
                 // Tab Content
                 Box(
@@ -193,17 +206,20 @@ fun AdminSettingsSheet(
                 ) {
                     when (selectedTab) {
                         0 -> AllowedAppsTab(allApps = allApps, onToggleAppAllowed = onToggleAppAllowed)
-                        1 -> PowerSettingsTab(
+                        1 -> HudThemeTab(currentTheme = currentTheme, onThemeChange = onThemeChange)
+                        2 -> PowerSettingsTab(
                             autoDisplayOnPlugged = autoDisplayOnPlugged,
                             sleepOnUnplugged = sleepOnUnplugged,
                             onUpdatePowerSettings = onUpdatePowerSettings
                         )
-                        2 -> SecuritySettingsTab(
+                        3 -> SecurityAndExitTab(
                             currentSecondaryPhone = currentSecondaryPhone,
                             onUpdatePin = onUpdatePin,
-                            onUpdateSecondaryPhone = onUpdateSecondaryPhone
+                            onUpdateSecondaryPhone = onUpdateSecondaryPhone,
+                            onRequestExit = onRequestExit,
+                            onRequestUninstall = onRequestUninstall
                         )
-                        3 -> SoundboxSettingsTab(
+                        4 -> SoundboxSettingsTab(
                             currency = currency,
                             paymentHistory = paymentHistory,
                             onUpdateCurrency = onUpdateCurrency,
@@ -212,9 +228,9 @@ fun AdminSettingsSheet(
                     }
                 }
 
-                // Bottom Exit Kiosk Bar
+                // Bottom Action Bar
                 Surface(
-                    color = Slate900,
+                    color = CockpitSurface,
                     tonalElevation = 8.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -226,29 +242,102 @@ fun AdminSettingsSheet(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         OutlinedButton(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_MAIN).apply {
-                                    addCategory(Intent.CATEGORY_HOME)
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(Intent.createChooser(intent, "Select Home Launcher"))
-                            },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonRed),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, CrimsonRed.copy(alpha = 0.6f)),
+                            onClick = onRequestExit,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AmberGold),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold.copy(alpha = 0.6f)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(imageVector = Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Exit Kiosk Launcher", fontSize = 12.sp)
+                            Text("Exit Kiosk", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = onClose,
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Slate900)
+                            colors = ButtonDefaults.buttonColors(containerColor = currentTheme.primaryColor, contentColor = CockpitBlack)
                         ) {
-                            Text("Done / Save", fontWeight = FontWeight.Bold)
+                            Text("Save & Return", fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HudThemeTab(
+    currentTheme: AutomotiveBrandTheme,
+    onThemeChange: (AutomotiveBrandTheme) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "Automotive Head-Up Display (HUD) Themes",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = Color.White
+        )
+        Text(
+            text = "Switch between Tesla minimalist cockpit, Tata Curvv EV instrument cluster, or high-contrast night windshield projection mode.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        AutomotiveBrandTheme.values().forEach { theme ->
+            val isSelected = theme == currentTheme
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onThemeChange(theme) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(
+                    if (isSelected) 2.dp else 1.dp,
+                    if (isSelected) theme.primaryColor else CockpitBorder
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(theme.primaryColor)
+                            )
+                            Text(
+                                text = theme.displayName,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = when (theme) {
+                                AutomotiveBrandTheme.TESLA -> "Cyber-slate minimalist theme with electric cyan telemetry and autopilot status."
+                                AutomotiveBrandTheme.TATA_EV -> "Modern Indian EV sports theme with Curvv/Nexon EV orange power and teal regen."
+                                AutomotiveBrandTheme.MONO_HUD -> "High-contrast monochrome green projection optimized for car windshield reflection."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (isSelected) {
+                        Text(
+                            text = "ACTIVE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = theme.primaryColor
+                        )
                     }
                 }
             }
@@ -301,10 +390,10 @@ fun AppWhitelistRow(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Slate900),
+        colors = CardDefaults.cardColors(containerColor = CockpitCard),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (app.isAllowed) NeonCyan.copy(alpha = 0.5f) else Slate800
+            if (app.isAllowed) HudCyan.copy(alpha = 0.5f) else CockpitBorder
         )
     ) {
         Row(
@@ -323,7 +412,7 @@ fun AppWhitelistRow(
                     modifier = Modifier
                         .size(42.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Slate800),
+                        .background(CockpitSurface),
                     contentAlignment = Alignment.Center
                 ) {
                     if (bitmap != null) {
@@ -336,7 +425,7 @@ fun AppWhitelistRow(
                             contentScale = ContentScale.Fit
                         )
                     } else {
-                        Icon(imageVector = Icons.Default.Apps, contentDescription = null, tint = NeonCyan)
+                        Icon(imageVector = Icons.Default.Apps, contentDescription = null, tint = HudCyan)
                     }
                 }
 
@@ -362,10 +451,10 @@ fun AppWhitelistRow(
                 checked = app.isAllowed,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Slate900,
-                    checkedTrackColor = NeonCyan,
+                    checkedThumbColor = CockpitBlack,
+                    checkedTrackColor = HudCyan,
                     uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    uncheckedTrackColor = Slate800
+                    uncheckedTrackColor = CockpitSurface
                 ),
                 modifier = Modifier.testTag("switch_${app.packageName}")
             )
@@ -400,8 +489,8 @@ fun PowerSettingsTab(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Slate800)
+            colors = CardDefaults.cardColors(containerColor = CockpitCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(
@@ -427,11 +516,11 @@ fun PowerSettingsTab(
                             displayOn = it
                             onUpdatePowerSettings(displayOn, sleepOn)
                         },
-                        colors = SwitchDefaults.colors(checkedTrackColor = EmeraldGreen)
+                        colors = SwitchDefaults.colors(checkedTrackColor = HudMint)
                     )
                 }
 
-                HorizontalDivider(color = Slate800)
+                HorizontalDivider(color = CockpitBorder)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -465,141 +554,205 @@ fun PowerSettingsTab(
 }
 
 @Composable
-fun SecuritySettingsTab(
+fun SecurityAndExitTab(
     currentSecondaryPhone: String,
     onUpdatePin: (String) -> Boolean,
-    onUpdateSecondaryPhone: (String) -> Unit
+    onUpdateSecondaryPhone: (String) -> Unit,
+    onRequestExit: () -> Unit,
+    onRequestUninstall: () -> Unit
 ) {
     var newPinText by remember { mutableStateOf("") }
     var confirmPinText by remember { mutableStateOf("") }
     var pinMessage by remember { mutableStateOf<String?>(null) }
     var phoneText by remember { mutableStateOf(currentSecondaryPhone) }
 
-    Column(
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Kiosk Security & 8-Digit Password",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
-        )
+        item {
+            Text(
+                text = "Kiosk Security & Passwords",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+        }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Slate800)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Change 8-Digit PIN",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
-
-                OutlinedTextField(
-                    value = newPinText,
-                    onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) newPinText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("New 8-Digit PIN") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Slate800,
-                        unfocusedContainerColor = Slate800,
-                        focusedBorderColor = NeonCyan,
-                        unfocusedBorderColor = Slate700
-                    )
-                )
-
-                OutlinedTextField(
-                    value = confirmPinText,
-                    onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) confirmPinText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Confirm 8-Digit PIN") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Slate800,
-                        unfocusedContainerColor = Slate800,
-                        focusedBorderColor = NeonCyan,
-                        unfocusedBorderColor = Slate700
-                    )
-                )
-
-                if (pinMessage != null) {
+        // Change 8-Digit PIN Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = pinMessage ?: "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (pinMessage?.contains("success", ignoreCase = true) == true) EmeraldGreen else CrimsonRed
+                        text = "Change 8-Digit Password",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
                     )
-                }
 
-                Button(
-                    onClick = {
-                        if (newPinText.length != 8) {
-                            pinMessage = "PIN must be exactly 8 digits"
-                        } else if (newPinText != confirmPinText) {
-                            pinMessage = "PIN confirmation does not match"
-                        } else {
-                            val ok = onUpdatePin(newPinText)
-                            pinMessage = if (ok) "8-Digit PIN successfully updated!" else "Error updating PIN"
-                            if (ok) {
-                                newPinText = ""
-                                confirmPinText = ""
+                    OutlinedTextField(
+                        value = newPinText,
+                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) newPinText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("New 8-Digit PIN") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = CockpitSurface,
+                            unfocusedContainerColor = CockpitSurface,
+                            focusedBorderColor = HudCyan,
+                            unfocusedBorderColor = CockpitBorder
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = confirmPinText,
+                        onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) confirmPinText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Confirm 8-Digit PIN") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = CockpitSurface,
+                            unfocusedContainerColor = CockpitSurface,
+                            focusedBorderColor = HudCyan,
+                            unfocusedBorderColor = CockpitBorder
+                        )
+                    )
+
+                    if (pinMessage != null) {
+                        Text(
+                            text = pinMessage ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (pinMessage?.contains("success", ignoreCase = true) == true) HudMint else CrimsonRed
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (newPinText.length != 8) {
+                                pinMessage = "PIN must be exactly 8 digits"
+                            } else if (newPinText != confirmPinText) {
+                                pinMessage = "PIN confirmation does not match"
+                            } else {
+                                val ok = onUpdatePin(newPinText)
+                                pinMessage = if (ok) "8-Digit PIN successfully updated!" else "Error updating PIN"
+                                if (ok) {
+                                    newPinText = ""
+                                    confirmPinText = ""
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Slate900)
-                ) {
-                    Text("Update 8-Digit PIN", fontWeight = FontWeight.Bold)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = HudCyan, contentColor = CockpitBlack)
+                    ) {
+                        Text("Update 8-Digit PIN", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Slate800)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Secondary Phone (Emergency OTP Recovery)",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
-
-                Text(
-                    text = "If you forget the 8-digit password, the kiosk locks and generates random challenge words. The emergency OTP is dispatched to this secondary phone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = phoneText,
-                    onValueChange = { phoneText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Secondary Phone Number") },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Slate800,
-                        unfocusedContainerColor = Slate800,
-                        focusedBorderColor = NeonCyan,
-                        unfocusedBorderColor = Slate700
+        // Secondary Phone Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Secondary Phone (Emergency OTP)",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
                     )
-                )
 
-                Button(
-                    onClick = { onUpdateSecondaryPhone(phoneText) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AmberGold, contentColor = Slate900)
-                ) {
-                    Text("Save Secondary Phone", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "If you forget the 8-digit password, the locked kiosk generates random challenge words. The emergency OTP is dispatched to this secondary phone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = phoneText,
+                        onValueChange = { phoneText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Secondary Phone Number") },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = CockpitSurface,
+                            unfocusedContainerColor = CockpitSurface,
+                            focusedBorderColor = HudCyan,
+                            unfocusedBorderColor = CockpitBorder
+                        )
+                    )
+
+                    Button(
+                        onClick = { onUpdateSecondaryPhone(phoneText) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AmberGold, contentColor = CockpitBlack)
+                    ) {
+                        Text("Save Secondary Phone", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Password Protected Exit & Uninstall Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TeslaRed.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = TeslaRed)
+                        Text(
+                            text = "Kiosk Exit & App Uninstall (Password Protected)",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = "To exit kiosk mode or uninstall this app from the device, the 8-digit password is required to prevent unauthorized tampering.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onRequestExit,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold)
+                        ) {
+                            Icon(imageVector = Icons.Default.ExitToApp, contentDescription = null, tint = AmberGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Exit Kiosk", color = AmberGold, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = onRequestUninstall,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = TeslaRed, contentColor = Color.White)
+                        ) {
+                            Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Uninstall App", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
         }
@@ -629,8 +782,8 @@ fun SoundboxSettingsTab(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Slate800)
+            colors = CardDefaults.cardColors(containerColor = CockpitCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -649,8 +802,8 @@ fun SoundboxSettingsTab(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) EmeraldGreen else Slate800)
-                                .border(1.dp, if (isSelected) EmeraldGreen else Slate700, RoundedCornerShape(10.dp))
+                                .background(if (isSelected) HudMint else CockpitSurface)
+                                .border(1.dp, if (isSelected) HudMint else CockpitBorder, RoundedCornerShape(10.dp))
                                 .clickable { onUpdateCurrency(curr) }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center
@@ -658,7 +811,7 @@ fun SoundboxSettingsTab(
                             Text(
                                 text = curr,
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) Slate900 else Color.White
+                                color = if (isSelected) CockpitBlack else Color.White
                             )
                         }
                     }
@@ -670,8 +823,8 @@ fun SoundboxSettingsTab(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldGreen.copy(alpha = 0.4f))
+            colors = CardDefaults.cardColors(containerColor = CockpitCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, HudMint.copy(alpha = 0.4f))
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -689,7 +842,7 @@ fun SoundboxSettingsTab(
                     onClick = { onTestAnnouncement(25.0) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen, contentColor = Slate900)
+                    colors = ButtonDefaults.buttonColors(containerColor = HudMint, contentColor = CockpitBlack)
                 ) {
                     Icon(imageVector = Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -723,7 +876,7 @@ fun SoundboxSettingsTab(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Slate900)
+                            .background(CockpitCard)
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -732,7 +885,7 @@ fun SoundboxSettingsTab(
                             Text(
                                 text = record.announcementText,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = EmeraldGreen
+                                color = HudMint
                             )
                             Text(
                                 text = record.formattedTime,
@@ -745,7 +898,7 @@ fun SoundboxSettingsTab(
                             Icon(
                                 imageVector = Icons.Default.Campaign,
                                 contentDescription = "Replay",
-                                tint = EmeraldGreen,
+                                tint = HudMint,
                                 modifier = Modifier.size(20.dp)
                             )
                         }

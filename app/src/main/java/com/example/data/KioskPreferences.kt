@@ -20,6 +20,8 @@ class KioskPreferences(context: Context) {
         private const val KEY_PAYMENT_PHRASE = "kiosk_payment_phrase"
         private const val KEY_PAYMENT_HISTORY = "kiosk_payment_history"
         private const val KEY_KIOSK_LOCKED = "kiosk_mode_locked"
+        private const val KEY_HUD_THEME = "kiosk_hud_theme"
+        private const val KEY_HUD_MIRRORED = "kiosk_hud_mirrored"
         const val DEFAULT_PIN = "12345678"
     }
 
@@ -54,6 +56,14 @@ class KioskPreferences(context: Context) {
     var isKioskLocked: Boolean
         get() = prefs.getBoolean(KEY_KIOSK_LOCKED, true)
         set(value) = prefs.edit().putBoolean(KEY_KIOSK_LOCKED, value).apply()
+
+    var hudTheme: String
+        get() = prefs.getString(KEY_HUD_THEME, "TESLA") ?: "TESLA"
+        set(value) = prefs.edit().putString(KEY_HUD_THEME, value).apply()
+
+    var isHudMirrored: Boolean
+        get() = prefs.getBoolean(KEY_HUD_MIRRORED, false)
+        set(value) = prefs.edit().putBoolean(KEY_HUD_MIRRORED, value).apply()
 
     fun getPaymentHistory(): List<PaymentRecord> {
         val json = prefs.getString(KEY_PAYMENT_HISTORY, null) ?: return emptyList()
