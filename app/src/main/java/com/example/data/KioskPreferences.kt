@@ -14,6 +14,7 @@ class KioskPreferences(context: Context) {
         private const val KEY_PIN = "kiosk_8_digit_pin"
         private const val KEY_SECONDARY_PHONE = "kiosk_secondary_phone"
         private const val KEY_ALLOWED_PACKAGES = "kiosk_allowed_packages"
+        private const val KEY_BLACKLISTED_PACKAGES = "kiosk_blacklisted_packages"
         private const val KEY_POWER_AUTO_DISPLAY = "kiosk_power_auto_display"
         private const val KEY_SLEEP_ON_UNPLUG = "kiosk_sleep_on_unplug"
         private const val KEY_CURRENCY = "kiosk_currency"
@@ -83,6 +84,10 @@ class KioskPreferences(context: Context) {
     var allowedPackages: Set<String>
         get() = prefs.getStringSet(KEY_ALLOWED_PACKAGES, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_ALLOWED_PACKAGES, value).apply()
+
+    var blacklistedPackages: Set<String>
+        get() = prefs.getStringSet(KEY_BLACKLISTED_PACKAGES, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_BLACKLISTED_PACKAGES, value).apply()
 
     var autoDisplayOnPlugged: Boolean
         get() = prefs.getBoolean(KEY_POWER_AUTO_DISPLAY, true)

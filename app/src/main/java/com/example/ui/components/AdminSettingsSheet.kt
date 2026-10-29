@@ -23,7 +23,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExitToApp
@@ -100,6 +102,7 @@ fun AdminSettingsSheet(
     currentTheme: AutomotiveBrandTheme,
     onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
+    onToggleAppBlacklisted: (String, Boolean) -> Unit = { _, _ -> },
     onUpdatePin: (String) -> Boolean,
     onUpdateSecondaryPhone: (String) -> Unit,
     onUpdatePowerSettings: (Boolean, Boolean) -> Unit,
@@ -205,7 +208,11 @@ fun AdminSettingsSheet(
                         .padding(16.dp)
                 ) {
                     when (selectedTab) {
-                        0 -> AllowedAppsTab(allApps = allApps, onToggleAppAllowed = onToggleAppAllowed)
+                        0 -> AllowedAppsTab(
+                            allApps = allApps,
+                            onToggleAppAllowed = onToggleAppAllowed,
+                            onToggleAppBlacklisted = onToggleAppBlacklisted
+                        )
                         1 -> HudThemeTab(currentTheme = currentTheme, onThemeChange = onThemeChange)
                         2 -> PowerSettingsTab(
                             autoDisplayOnPlugged = autoDisplayOnPlugged,
@@ -348,16 +355,17 @@ fun HudThemeTab(
 @Composable
 fun AllowedAppsTab(
     allApps: List<AppItem>,
-    onToggleAppAllowed: (String, Boolean) -> Unit
+    onToggleAppAllowed: (String, Boolean) -> Unit,
+    onToggleAppBlacklisted: (String, Boolean) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "App Whitelist Configuration",
+            text = "App Access & Blacklist Policy",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = Color.White
         )
         Text(
-            text = "Only apps enabled below will appear on the kiosk home screen. All unwanted or unapproved apps remain hidden.",
+            text = "When Kiosk is activated, non-whitelisted apps remain hidden and blacklisted apps are strictly denied from opening anywhere.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -373,7 +381,8 @@ fun AllowedAppsTab(
             items(allApps, key = { it.packageName }) { app ->
                 AppWhitelistRow(
                     app = app,
-                    onToggle = { isAllowed -> onToggleAppAllowed(app.packageName, isAllowed) }
+                    onToggleAllowed = { isAllowed -> onToggleAppAllowed(app.packageName, isAllowed) },
+                    onToggleBlacklist = { isBlacklisted -> onToggleAppBlacklisted(app.packageName, isBlacklisted) }
                 )
             }
         }
@@ -383,7 +392,8 @@ fun AllowedAppsTab(
 @Composable
 fun AppWhitelistRow(
     app: AppItem,
-    onToggle: (Boolean) -> Unit
+    onToggleAllowed: (Boolean) -> Unit,
+    onToggleBlacklist: (Boolean) -> Unit
 ) {
     val bitmap = rememberDrawableBitmap(app.icon)
 
@@ -393,7 +403,11 @@ fun AppWhitelistRow(
         colors = CardDefaults.cardColors(containerColor = CockpitCard),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (app.isAllowed) HudCyan.copy(alpha = 0.5f) else CockpitBorder
+            when {
+                app.isBlacklisted -> CrimsonRed.copy(alpha = 0.8f)
+                app.isAllowed -> HudCyan.copy(alpha = 0.5f)
+                else -> CockpitBorder
+            }
         )
     ) {
         Row(
@@ -429,14 +443,62 @@ fun AppWhitelistRow(
                     }
                 }
 
-                Column {
-                    Text(
-                        text = app.name,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = app.name,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        // Status Badge
+                        if (app.isBlacklisted) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(CrimsonRed.copy(alpha = 0.2f))
+                                    .border(1.dp, CrimsonRed, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Block,
+                                        contentDescription = null,
+                                        tint = CrimsonRed,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = "BLOCKED",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                        color = CrimsonRed
+                                    )
+                                }
+                            }
+                        } else if (app.isAllowed) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(HudCyan.copy(alpha = 0.2f))
+                                    .border(1.dp, HudCyan, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "ALLOWED",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = HudCyan
+                                )
+                            }
+                        }
+                    }
+
                     Text(
                         text = app.packageName,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
@@ -447,17 +509,44 @@ fun AppWhitelistRow(
                 }
             }
 
-            Switch(
-                checked = app.isAllowed,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = CockpitBlack,
-                    checkedTrackColor = HudCyan,
-                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    uncheckedTrackColor = CockpitSurface
-                ),
-                modifier = Modifier.testTag("switch_${app.packageName}")
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Blacklist toggle chip
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (app.isBlacklisted) CrimsonRed else CockpitSurface)
+                        .border(1.dp, if (app.isBlacklisted) CrimsonRed else CockpitBorder, RoundedCornerShape(8.dp))
+                        .clickable { onToggleBlacklist(!app.isBlacklisted) }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .testTag("blacklist_btn_${app.packageName}")
+                ) {
+                    Text(
+                        text = if (app.isBlacklisted) "DENIED" else "BLOCK",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        ),
+                        color = if (app.isBlacklisted) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Whitelist toggle switch (disabled if explicitly blacklisted)
+                Switch(
+                    checked = app.isAllowed,
+                    onCheckedChange = onToggleAllowed,
+                    enabled = !app.isBlacklisted,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = CockpitBlack,
+                        checkedTrackColor = HudCyan,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = CockpitSurface
+                    ),
+                    modifier = Modifier.testTag("switch_${app.packageName}")
+                )
+            }
         }
     }
 }
@@ -833,20 +922,20 @@ fun SoundboxSettingsTab(
                     color = Color.White
                 )
                 Text(
-                    text = "Formula: {Tone} {payment amount} received",
+                    text = "Format: {Beep} {amount} received • Male Voice",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Button(
-                    onClick = { onTestAnnouncement(25.0) },
+                    onClick = { onTestAnnouncement(110.0) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = HudMint, contentColor = CockpitBlack)
                 ) {
                     Icon(imageVector = Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Play Test: \"[Tone] 25 ${if (currency == "$") "dollars" else "units"} received\"", fontWeight = FontWeight.Bold)
+                    Text("Play Test: \"[Beep] 110 ${if (currency == "₹") "rupees" else "received"}\"", fontWeight = FontWeight.Bold)
                 }
             }
         }

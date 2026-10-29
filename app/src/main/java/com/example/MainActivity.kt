@@ -44,5 +44,9 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         viewModel.refreshDefaultHomeState()
+        val blockedPkg = intent.getStringExtra("BLOCKED_APP_PKG")
+        if (!blockedPkg.isNullOrEmpty()) {
+            viewModel.notifyAppBlocked(blockedPkg)
+        }
     }
 }

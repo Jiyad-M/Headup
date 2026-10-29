@@ -71,6 +71,9 @@ class PowerMonitor(
                     }
 
                     val wasPlugged = _powerState.value.isPlugged
+                    val isFirstCheck = !hasPerformedInitialCheck
+                    hasPerformedInitialCheck = true
+
                     _powerState.value = PowerState(
                         isPlugged = isPlugged,
                         batteryLevel = batteryPct,
@@ -80,13 +83,15 @@ class PowerMonitor(
 
                     if (isPlugged) {
                         handlePowerConnected()
-                    } else if (wasPlugged && !isPlugged) {
+                    } else if (isFirstCheck || (wasPlugged && !isPlugged)) {
                         handlePowerDisconnected()
                     }
                 }
             }
         }
     }
+
+    private var hasPerformedInitialCheck = false
 
     fun startMonitoring() {
         val filter = IntentFilter().apply {
@@ -120,16 +125,21 @@ class PowerMonitor(
             activity.window.attributes = lp
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+        restoreSystemScreenTimeout()
         wakeDevice()
     }
 
     /**
      * Power unplugged:
+     * "When unpluged screen timeout is 3 second"
      * "unplugged completly light off after 3 second like power button press compltly off"
      */
     fun handlePowerDisconnected() {
         countdownJob?.cancel()
         countdownJob = coroutineScope.launch {
+            // Set Android system screen timeout to 3000ms (3 seconds) if permissible
+            applySystemScreenTimeout(3000)
+
             // 3-second countdown
             for (sec in 3 downTo 1) {
                 _unplugCountdown.value = sec
@@ -146,6 +156,30 @@ class PowerMonitor(
                 activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         }
+    }
+
+    private fun applySystemScreenTimeout(timeoutMs: Int) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (android.provider.Settings.System.canWrite(activity)) {
+                    android.provider.Settings.System.putInt(
+                        activity.contentResolver,
+                        android.provider.Settings.System.SCREEN_OFF_TIMEOUT,
+                        timeoutMs
+                    )
+                }
+            } else {
+                android.provider.Settings.System.putInt(
+                    activity.contentResolver,
+                    android.provider.Settings.System.SCREEN_OFF_TIMEOUT,
+                    timeoutMs
+                )
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun restoreSystemScreenTimeout() {
+        applySystemScreenTimeout(600000) // 10 minutes when plugged in
     }
 
     /**

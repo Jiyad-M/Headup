@@ -56,15 +56,53 @@ class PaymentSoundboxManager(
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.setLanguage(Locale.US)
             }
-            tts?.setSpeechRate(0.95f)
-            tts?.setPitch(1.05f)
+            configureMaleVoice()
             isTtsReady = true
         }
     }
 
     /**
-     * Plays the high-clarity notification chime tone followed by the voice announcement.
-     * "{Tone}{ payment amount} received"
+     * Configures a distinct male voice from available TTS engine voices,
+     * or tunes pitch into masculine register (0.82f) for deep vocal clarity.
+     */
+    private fun configureMaleVoice() {
+        try {
+            val voices = tts?.voices
+            if (!voices.isNullOrEmpty()) {
+                val currentLocale = tts?.language ?: Locale.getDefault()
+                val matchingLocaleVoices = voices.filter { it.locale.language == currentLocale.language }
+
+                // Search for male voice candidates in current locale or globally
+                val maleVoice = matchingLocaleVoices.find { voice ->
+                    val name = voice.name.lowercase(Locale.ROOT)
+                    (name.contains("male") && !name.contains("female")) ||
+                            name.contains("-m-") ||
+                            name.contains("man") ||
+                            name.contains("#male")
+                } ?: voices.find { voice ->
+                    val name = voice.name.lowercase(Locale.ROOT)
+                    (name.contains("male") && !name.contains("female")) ||
+                            name.contains("-m-") ||
+                            name.contains("#male")
+                } ?: matchingLocaleVoices.firstOrNull { !it.isNetworkConnectionRequired }
+
+                if (maleVoice != null) {
+                    tts?.voice = maleVoice
+                    Log.d("Soundbox", "Selected male voice: ${maleVoice.name}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("Soundbox", "Error selecting male voice", e)
+        }
+
+        // Apply masculine pitch and cadence
+        tts?.setPitch(0.82f)
+        tts?.setSpeechRate(0.95f)
+    }
+
+    /**
+     * Plays the high-clarity notification beep tone followed by the male voice announcement.
+     * "Announcement starts with a beep: {Beep}{ payment amount} received"
      */
     fun announcePayment(
         amount: Double,
@@ -74,10 +112,13 @@ class PaymentSoundboxManager(
         coroutineScope.launch {
             _isAnnouncing.value = true
 
-            // 1. Play Tone (Crisp dual-frequency chime)
-            playChimeTone()
+            // 1. Play Sharp Beep Tone first
+            playBeepTone()
 
             delay(380)
+
+            // Re-assert male voice settings prior to speech
+            configureMaleVoice()
 
             // 2. Format speech message
             val currencyWord = getCurrencyWord(currencySymbol, amount)
@@ -91,7 +132,7 @@ class PaymentSoundboxManager(
             val displayAnnouncement = "$currencySymbol$formattedAmount received"
             _lastAnnouncedText.value = displayAnnouncement
 
-            // 3. Speak via TextToSpeech
+            // 3. Speak via TextToSpeech in male voice
             if (isTtsReady && tts != null) {
                 tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "PAYMENT_ANNOUNCE_${System.currentTimeMillis()}")
             }
@@ -109,42 +150,41 @@ class PaymentSoundboxManager(
             preferences.addPaymentRecord(record)
             onComplete?.invoke(record)
 
-            delay(2200)
+            delay(2400)
             _isAnnouncing.value = false
         }
     }
 
-    private fun playChimeTone() {
+    private fun playBeepTone() {
         try {
-            // Primary tone attempt using ToneGenerator
-            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-            toneGen.startTone(ToneGenerator.TONE_PROP_BEEP2, 280)
+            // Loud, distinct notification beep tone
+            val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+            toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 280)
             mainHandler.postDelayed({
                 try {
                     toneGen.release()
                 } catch (_: Exception) {}
-            }, 500)
+            }, 450)
         } catch (_: Exception) {
-            // High fidelity synthesized audio fallback
-            playSynthesizedTone()
+            // Synthesized high-clarity 950Hz beep fallback
+            playSynthesizedBeep()
         }
     }
 
-    private fun playSynthesizedTone() {
+    private fun playSynthesizedBeep() {
         Thread {
             try {
                 val sampleRate = 44100
                 val durationMs = 280
                 val numSamples = (durationMs * sampleRate) / 1000
                 val samples = ShortArray(numSamples)
-                val freq1 = 880.0 // A5
-                val freq2 = 1318.51 // E6 (cheerful high chime)
+                val beepFreq = 980.0 // Pure crisp single beep
 
                 for (i in 0 until numSamples) {
                     val time = i.toDouble() / sampleRate
-                    val envelope = 1.0 - (i.toDouble() / numSamples)
-                    val sampleVal = ((sin(2.0 * Math.PI * freq1 * time) + sin(2.0 * Math.PI * freq2 * time)) / 2.0) * envelope
-                    samples[i] = (sampleVal * Short.MAX_VALUE * 0.85).toInt().toShort()
+                    val envelope = if (i < numSamples * 0.9) 1.0 else (numSamples - i) / (numSamples * 0.1)
+                    val sampleVal = sin(2.0 * Math.PI * beepFreq * time) * envelope
+                    samples[i] = (sampleVal * Short.MAX_VALUE * 0.9).toInt().toShort()
                 }
 
                 val audioTrack = AudioTrack.Builder()

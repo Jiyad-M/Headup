@@ -19,8 +19,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -53,7 +57,9 @@ import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CockpitBlack
 import com.example.ui.theme.CockpitBorder
 import com.example.ui.theme.CockpitCard
+import com.example.ui.theme.CrimsonRed
 import com.example.ui.theme.HudCyan
+import com.example.ui.theme.Slate900
 import com.example.ui.theme.TataPunchDarkJade
 import com.example.ui.theme.TataPunchJade
 import com.example.ui.theme.TataPunchMint
@@ -85,6 +91,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
 
     val pinError by viewModel.pinError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+    val blockedAppAttempt by viewModel.blockedAppAttempt.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -302,6 +309,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 currentTheme = hudTheme,
                 onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },
+                onToggleAppBlacklisted = { pkg, blacklisted -> viewModel.toggleAppBlacklisted(pkg, blacklisted) },
                 onUpdatePin = { newPin -> viewModel.updatePin(newPin) },
                 onUpdateSecondaryPhone = { phone -> viewModel.updateSecondaryPhone(phone) },
                 onUpdatePowerSettings = { disp, sleep -> viewModel.updatePowerSettings(disp, sleep) },
@@ -316,6 +324,51 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                     viewModel.requestUninstallKiosk()
                 },
                 onClose = { viewModel.closeAdminSettings() }
+            )
+        }
+
+        // 10. Access Denied Dialog when user attempts to open an unauthorized/blacklisted app
+        if (blockedAppAttempt != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissBlockedDialog() },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Block,
+                        contentDescription = null,
+                        tint = CrimsonRed,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "ACCESS DENIED",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = CrimsonRed
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "The application '$blockedAppAttempt' is blacklisted and strictly blocked by Kiosk Mode.",
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Access to non-whitelisted and blacklisted applications is completely denied under active kiosk mode.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.dismissBlockedDialog() },
+                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonRed)
+                    ) {
+                        Text("Dismiss", fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = Slate900,
+                shape = RoundedCornerShape(16.dp)
             )
         }
     }

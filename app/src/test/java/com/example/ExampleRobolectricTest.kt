@@ -148,4 +148,31 @@ class ExampleRobolectricTest {
     assertTrue(prefs.sleepOnUnplugged)
     assertTrue(prefs.autoDisplayOnPlugged)
   }
+
+  @Test
+  fun `test blacklist enforcement denies blacklisted apps when activated`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+    val appManager = com.example.apps.AppManager(context, prefs)
+
+    val testPkg = "com.unwanted.game"
+    prefs.isActivated = true
+    prefs.allowedPackages = setOf("com.google.android.apps.maps", "com.ubercab.driver")
+    prefs.blacklistedPackages = setOf(testPkg)
+
+    // Allowed apps return true
+    assertTrue(appManager.isPackageAllowed("com.google.android.apps.maps"))
+    assertTrue(appManager.isPackageAllowed(context.packageName)) // self is always allowed
+
+    // Blacklisted app is strictly denied
+    assertFalse(appManager.isPackageAllowed(testPkg))
+
+    // Non-whitelisted app is also denied
+    assertFalse(appManager.isPackageAllowed("com.random.unapproved"))
+
+    // Toggling blacklist updates preferences
+    appManager.toggleAppBlacklisted("com.random.unapproved", true)
+    assertTrue(prefs.blacklistedPackages.contains("com.random.unapproved"))
+    assertFalse(appManager.isPackageAllowed("com.random.unapproved"))
+  }
 }

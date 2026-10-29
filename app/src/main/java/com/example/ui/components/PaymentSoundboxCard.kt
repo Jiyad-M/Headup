@@ -73,8 +73,6 @@ fun PaymentSoundboxCard(
     var customAmountText by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val presetAmounts = listOf(68.0, 110.0, 182.0, 500.0, 1000.0)
-
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -185,42 +183,39 @@ fun PaymentSoundboxCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Text(
-                text = "Quick Announce Presets",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Quick Preset Buttons
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Male Voice & Beep Mode Badge
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Slate800)
+                    .border(1.dp, Slate700, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                presetAmounts.forEach { amt ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Slate800)
-                            .border(1.dp, Slate700, RoundedCornerShape(10.dp))
-                            .clickable { onAnnounce(amt) }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .testTag("quick_amt_${amt.toInt()}"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "$currency${amt.toInt()}",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        )
-                    }
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(EmeraldGreen)
+                    )
+                    Text(
+                        text = "Beep + Male Voice Configured",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = EmeraldGreenLight
+                    )
                 }
+                Text(
+                    text = "Auto-Listening",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             Spacer(modifier = Modifier.height(14.dp))

@@ -6,6 +6,7 @@ data class AppItem(
     val packageName: String,
     val name: String,
     val isAllowed: Boolean = true,
+    val isBlacklisted: Boolean = false,
     val isSystem: Boolean = false,
     val icon: Drawable? = null
 )

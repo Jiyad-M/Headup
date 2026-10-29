@@ -94,6 +94,9 @@ class KioskViewModel(
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    private val _blockedAppAttempt = MutableStateFlow<String?>(null)
+    val blockedAppAttempt: StateFlow<String?> = _blockedAppAttempt.asStateFlow()
+
     private val _isNotificationAccessGranted = MutableStateFlow(checkNotificationAccessGranted())
     val isNotificationAccessGranted: StateFlow<Boolean> = _isNotificationAccessGranted.asStateFlow()
 
@@ -241,10 +244,30 @@ class KioskViewModel(
     }
 
     fun launchApp(pkg: String) {
+        if (!appManager.isPackageAllowed(pkg)) {
+            _blockedAppAttempt.value = pkg
+            _statusMessage.value = "ACCESS DENIED: $pkg is blacklisted and blocked by Kiosk."
+            return
+        }
         val success = appManager.launchApp(pkg)
         if (!success) {
             _statusMessage.value = "Unable to launch $pkg"
         }
+    }
+
+    fun dismissBlockedDialog() {
+        _blockedAppAttempt.value = null
+    }
+
+    fun notifyAppBlocked(pkg: String) {
+        _blockedAppAttempt.value = pkg
+        _statusMessage.value = "ACCESS DENIED: $pkg is blacklisted and blocked by Kiosk."
+    }
+
+    fun toggleAppBlacklisted(pkg: String, isBlacklisted: Boolean) {
+        appManager.toggleAppBlacklisted(pkg, isBlacklisted)
+        refreshApps()
+        _statusMessage.value = if (isBlacklisted) "Added to Blacklist (Blocked)" else "Removed from Blacklist"
     }
 
     fun announcePayment(amount: Double) {
