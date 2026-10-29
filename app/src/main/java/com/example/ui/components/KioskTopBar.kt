@@ -110,8 +110,8 @@ fun KioskTopBar(
                 )
                 Text(
                     text = when (currentTheme) {
+                        AutomotiveBrandTheme.TATA_PUNCH_EV -> "TATA PUNCH EV INFOTAINMENT"
                         AutomotiveBrandTheme.TESLA -> "TESLA COCKPIT"
-                        AutomotiveBrandTheme.TATA_EV -> "TATA EV CLUSTER"
                         AutomotiveBrandTheme.MONO_HUD -> "HUD WINDSHIELD"
                     },
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.5.sp),

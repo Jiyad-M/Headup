@@ -2,16 +2,17 @@ package com.example.ui
 
 import android.app.Activity
 import android.app.Application
-import android.content.ComponentName
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.apps.AppManager
-import com.example.apps.SplitLaunchResult
 import com.example.data.KioskPreferences
 import com.example.model.AppItem
 import com.example.model.OtpChallenge
@@ -48,6 +49,9 @@ class KioskViewModel(
     private val _isActivated = MutableStateFlow(preferences.isActivated)
     val isActivated: StateFlow<Boolean> = _isActivated.asStateFlow()
 
+    private val _isDefaultHome = MutableStateFlow(checkIsDefaultHome())
+    val isDefaultHome: StateFlow<Boolean> = _isDefaultHome.asStateFlow()
+
     private val _permittedApps = MutableStateFlow<List<AppItem>>(emptyList())
     val permittedApps: StateFlow<List<AppItem>> = _permittedApps.asStateFlow()
 
@@ -81,12 +85,6 @@ class KioskViewModel(
     private val _showAdminSettings = MutableStateFlow(false)
     val showAdminSettings: StateFlow<Boolean> = _showAdminSettings.asStateFlow()
 
-    private val _showSplitResultDialog = MutableStateFlow(false)
-    val showSplitResultDialog: StateFlow<Boolean> = _showSplitResultDialog.asStateFlow()
-
-    private val _lastSplitResult = MutableStateFlow<SplitLaunchResult?>(null)
-    val lastSplitResult: StateFlow<SplitLaunchResult?> = _lastSplitResult.asStateFlow()
-
     private val _pinError = MutableStateFlow<String?>(null)
     val pinError: StateFlow<String?> = _pinError.asStateFlow()
 
@@ -103,13 +101,14 @@ class KioskViewModel(
         try {
             AutomotiveBrandTheme.valueOf(preferences.hudTheme)
         } catch (_: Exception) {
-            AutomotiveBrandTheme.TESLA
+            AutomotiveBrandTheme.TATA_PUNCH_EV
         }
     )
     val hudTheme: StateFlow<AutomotiveBrandTheme> = _hudTheme.asStateFlow()
 
     val powerState: StateFlow<PowerState> = powerMonitor.powerState
-    val isDisplaySleeping: StateFlow<Boolean> = powerMonitor.isDisplaySleeping
+    val isDisplayCompletelyOff: StateFlow<Boolean> = powerMonitor.isDisplayCompletelyOff
+    val unplugCountdown: StateFlow<Int?> = powerMonitor.unplugCountdown
     val isAnnouncingPayment: StateFlow<Boolean> = soundboxManager.isAnnouncing
     val lastAnnouncedText: StateFlow<String> = soundboxManager.lastAnnouncedText
 
@@ -118,17 +117,80 @@ class KioskViewModel(
         refreshApps()
         loadPaymentHistory()
 
-        // Hook real-time payment notification listener
-        PaymentNotificationListenerService.onPaymentReceivedListener = { amount, rawText ->
+        PaymentNotificationListenerService.onPaymentReceivedListener = { amount, _ ->
             loadPaymentHistory()
             _statusMessage.value = "Payment Received: ₹$amount"
         }
 
-        // Hook real-time incoming SMS recovery listener
-        SmsRecoveryReceiver.onSmsRecoveryVerified = { sender, message ->
+        SmsRecoveryReceiver.onSmsRecoveryVerified = { sender, _ ->
             _isRecoveryVerified.value = true
             _remainingRecoveryTimeMillis.value = securityManager.getRemainingLockTimeMillis()
             _statusMessage.value = "Recovery SMS verified from $sender! 3-Hour timelock initiated."
+        }
+    }
+
+    fun checkIsDefaultHome(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val roleManager = activity.getSystemService(RoleManager::class.java)
+                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    return roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+                }
+            }
+            val intent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }
+            val resolveInfo = activity.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            resolveInfo?.activityInfo?.packageName == activity.packageName
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun refreshDefaultHomeState() {
+        _isDefaultHome.value = checkIsDefaultHome()
+        _isNotificationAccessGranted.value = checkNotificationAccessGranted()
+    }
+
+    /**
+     * Prompts the official Android dialog to set this app as Default Home
+     * replacing Samsung One UI permanently when Home button is tapped.
+     */
+    fun promptSetDefaultLauncher() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val roleManager = activity.getSystemService(RoleManager::class.java)
+                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    if (!roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+                        val roleIntent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                        activity.startActivity(roleIntent)
+                        return
+                    }
+                }
+            }
+
+            // Fallback 1: Home settings intent
+            try {
+                val homeSettingsIntent = Intent(Settings.ACTION_HOME_SETTINGS)
+                homeSettingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(homeSettingsIntent)
+                return
+            } catch (_: Exception) {}
+
+            // Fallback 2: Default apps settings
+            try {
+                val defaultAppsIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                defaultAppsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(defaultAppsIntent)
+                return
+            } catch (_: Exception) {}
+
+            // Fallback 3: Intent chooser
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(Intent.createChooser(intent, "Set Kiosk as Default Home (Choose 'Always')"))
+        } catch (_: Exception) {
+            _statusMessage.value = "Open Device Settings -> Apps -> Choose default apps -> Home app -> Select Kiosk Launcher"
         }
     }
 
@@ -158,22 +220,8 @@ class KioskViewModel(
         preferences.pin = password
         preferences.isActivated = true
         _isActivated.value = true
-        _statusMessage.value = "Kiosk Activated for $name! Prompting launcher selection..."
-
-        // Prompt user to set as default launcher to switch from original Samsung One UI
+        _statusMessage.value = "Kiosk Activated! Setting as default Home to convert Samsung Home button..."
         promptSetDefaultLauncher()
-    }
-
-    fun promptSetDefaultLauncher() {
-        try {
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            activity.startActivity(Intent.createChooser(intent, "Select Kiosk Launcher to replace Samsung One UI"))
-        } catch (e: Exception) {
-            _statusMessage.value = "Open Settings -> Default Apps -> Home App to select Kiosk Launcher"
-        }
     }
 
     fun setHudTheme(theme: AutomotiveBrandTheme) {
@@ -197,16 +245,6 @@ class KioskViewModel(
         if (!success) {
             _statusMessage.value = "Unable to launch $pkg"
         }
-    }
-
-    fun launchUberMapsSplitScreen() {
-        val result = appManager.launchSplitScreenUberAndMaps()
-        _lastSplitResult.value = result
-        _showSplitResultDialog.value = true
-    }
-
-    fun dismissSplitResultDialog() {
-        _showSplitResultDialog.value = false
     }
 
     fun announcePayment(amount: Double) {
@@ -264,7 +302,7 @@ class KioskViewModel(
                 addCategory(Intent.CATEGORY_HOME)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            activity.startActivity(Intent.createChooser(intent, "Choose Home Screen"))
+            activity.startActivity(Intent.createChooser(intent, "Choose Samsung Home to exit"))
         } catch (_: Exception) {
             _statusMessage.value = "Could not open launcher selector"
         }
@@ -282,11 +320,6 @@ class KioskViewModel(
         }
     }
 
-    /**
-     * Requirement 4:
-     * When tap forget button a two random words displayed.
-     * If the word received from alt number via SMS, change password after 3 hours.
-     */
     fun startTwoWordsRecovery() {
         _showPinDialog.value = false
         val (w1, w2) = securityManager.generateTwoRandomWords()
@@ -338,7 +371,6 @@ class KioskViewModel(
     }
 
     fun updatePin(newPin: String): Boolean {
-        // Enforce 3-hour rule if recovering, or normal update if authenticated
         if (preferences.isRecoveryVerified && !securityManager.canChangePasswordNow()) {
             val remain = securityManager.getRemainingLockTimeMillis()
             val mins = (remain / (1000 * 60))
@@ -367,8 +399,8 @@ class KioskViewModel(
         preferences.currency = newCurrency
     }
 
-    fun wakeDisplay() {
-        powerMonitor.wakeDisplayManual()
+    fun togglePowerSimulation() {
+        powerMonitor.togglePowerSimulation()
     }
 
     fun clearStatusMessage() {

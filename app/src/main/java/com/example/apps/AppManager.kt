@@ -11,21 +11,10 @@ import com.example.model.AppItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-enum class SplitLaunchResult {
-    SUCCESS_BOTH,
-    MAPS_ONLY_UBER_MISSING,
-    UBER_ONLY_MAPS_MISSING,
-    NEITHER_INSTALLED
-}
-
 class AppManager(
     private val context: Context,
     private val preferences: KioskPreferences
 ) {
-    companion object {
-        const val PKG_UBER_DRIVER = "com.ubercab.driver"
-        const val PKG_GOOGLE_MAPS = "com.google.android.apps.maps"
-    }
 
     /**
      * Loads all launchable apps on the device.
@@ -112,67 +101,5 @@ class AppManager(
             Log.e("AppManager", "Failed to launch $packageName", e)
             false
         }
-    }
-
-    /**
-     * Programmatically launches both the Uber Driver app and Google Maps into
-     * split-screen mode simultaneously using FLAG_ACTIVITY_LAUNCH_ADJACENT.
-     */
-    fun launchSplitScreenUberAndMaps(): SplitLaunchResult {
-        val pm = context.packageManager
-        val uberIntent = pm.getLaunchIntentForPackage(PKG_UBER_DRIVER)
-        val mapsIntent = pm.getLaunchIntentForPackage(PKG_GOOGLE_MAPS)
-
-        val splitFlags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or
-                Intent.FLAG_ACTIVITY_MULTIPLE_TASK
-
-        return when {
-            uberIntent != null && mapsIntent != null -> {
-                uberIntent.addFlags(splitFlags)
-                context.startActivity(uberIntent)
-
-                mapsIntent.addFlags(splitFlags)
-                context.startActivity(mapsIntent)
-                SplitLaunchResult.SUCCESS_BOTH
-            }
-            mapsIntent != null -> {
-                mapsIntent.addFlags(splitFlags)
-                context.startActivity(mapsIntent)
-                SplitLaunchResult.MAPS_ONLY_UBER_MISSING
-            }
-            uberIntent != null -> {
-                uberIntent.addFlags(splitFlags)
-                context.startActivity(uberIntent)
-                SplitLaunchResult.UBER_ONLY_MAPS_MISSING
-            }
-            else -> {
-                SplitLaunchResult.NEITHER_INSTALLED
-            }
-        }
-    }
-
-    fun openPlayStoreForUberDriver() {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$PKG_UBER_DRIVER")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$PKG_UBER_DRIVER")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(webIntent)
-        }
-    }
-
-    fun openMapsNavigationFallback() {
-        try {
-            val gmmIntentUri = Uri.parse("geo:0,0?q=")
-            val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(mapIntent)
-        } catch (_: Exception) {}
     }
 }

@@ -35,7 +35,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        viewModel.refreshDefaultHomeState()
         viewModel.refreshApps()
         viewModel.loadPaymentHistory()
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.refreshDefaultHomeState()
     }
 }

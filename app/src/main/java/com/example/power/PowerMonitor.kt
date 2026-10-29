@@ -6,13 +6,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.view.WindowManager
 import com.example.data.KioskPreferences
 import com.example.model.PowerState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class PowerMonitor(
     private val activity: Activity,
@@ -21,9 +28,14 @@ class PowerMonitor(
     private val _powerState = MutableStateFlow(PowerState())
     val powerState: StateFlow<PowerState> = _powerState.asStateFlow()
 
-    private val _isDisplaySleeping = MutableStateFlow(false)
-    val isDisplaySleeping: StateFlow<Boolean> = _isDisplaySleeping.asStateFlow()
+    private val _isDisplayCompletelyOff = MutableStateFlow(false)
+    val isDisplayCompletelyOff: StateFlow<Boolean> = _isDisplayCompletelyOff.asStateFlow()
 
+    private val _unplugCountdown = MutableStateFlow<Int?>(null)
+    val unplugCountdown: StateFlow<Int?> = _unplugCountdown.asStateFlow()
+
+    private var countdownJob: Job? = null
+    private val coroutineScope = CoroutineScope(Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
 
     private val receiver = object : BroadcastReceiver() {
@@ -55,9 +67,10 @@ class PowerMonitor(
                         BatteryManager.BATTERY_PLUGGED_AC -> "AC Wall Charger"
                         BatteryManager.BATTERY_PLUGGED_USB -> "USB Charging"
                         BatteryManager.BATTERY_PLUGGED_WIRELESS -> "Wireless Dock"
-                        else -> "Battery Only"
+                        else -> "Battery Discharging"
                     }
 
+                    val wasPlugged = _powerState.value.isPlugged
                     _powerState.value = PowerState(
                         isPlugged = isPlugged,
                         batteryLevel = batteryPct,
@@ -66,9 +79,9 @@ class PowerMonitor(
                     )
 
                     if (isPlugged) {
-                        applyScreenOnPolicy(true)
-                    } else if (preferences.sleepOnUnplugged) {
-                        applyScreenOnPolicy(false)
+                        handlePowerConnected()
+                    } else if (wasPlugged && !isPlugged) {
+                        handlePowerDisconnected()
                     }
                 }
             }
@@ -82,7 +95,6 @@ class PowerMonitor(
             addAction(Intent.ACTION_BATTERY_CHANGED)
         }
         val stickyIntent = activity.registerReceiver(receiver, filter)
-        // Parse sticky intent immediately
         stickyIntent?.let { receiver.onReceive(activity, it) }
     }
 
@@ -90,33 +102,63 @@ class PowerMonitor(
         try {
             activity.unregisterReceiver(receiver)
         } catch (_: Exception) {}
+        countdownJob?.cancel()
         releaseWakeLock()
     }
 
-    private fun handlePowerConnected() {
-        _isDisplaySleeping.value = false
-        applyScreenOnPolicy(true)
+    /**
+     * Power plugged: Display ON permanently, screen bright, kiosk works.
+     */
+    fun handlePowerConnected() {
+        countdownJob?.cancel()
+        _unplugCountdown.value = null
+        _isDisplayCompletelyOff.value = false
+
+        activity.runOnUiThread {
+            val lp = activity.window.attributes
+            lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            activity.window.attributes = lp
+            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         wakeDevice()
     }
 
-    private fun handlePowerDisconnected() {
-        applyScreenOnPolicy(false)
-        if (preferences.sleepOnUnplugged) {
-            _isDisplaySleeping.value = true
+    /**
+     * Power unplugged:
+     * "unplugged completly light off after 3 second like power button press compltly off"
+     */
+    fun handlePowerDisconnected() {
+        countdownJob?.cancel()
+        countdownJob = coroutineScope.launch {
+            // 3-second countdown
+            for (sec in 3 downTo 1) {
+                _unplugCountdown.value = sec
+                delay(1000)
+            }
+            _unplugCountdown.value = 0
+
+            // Turn screen completely black/off
+            _isDisplayCompletelyOff.value = true
+            activity.runOnUiThread {
+                val lp = activity.window.attributes
+                lp.screenBrightness = 0.001f // Blackout brightness (lowest hardware level)
+                activity.window.attributes = lp
+                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
         }
     }
 
-    fun wakeDisplayManual() {
-        _isDisplaySleeping.value = false
-    }
-
-    private fun applyScreenOnPolicy(turnOn: Boolean) {
-        activity.runOnUiThread {
-            if (turnOn && preferences.autoDisplayOnPlugged) {
-                activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            } else {
-                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
+    /**
+     * Emergency test simulator (for emulator or dev without power cable)
+     */
+    fun togglePowerSimulation() {
+        val currentPlugged = _powerState.value.isPlugged
+        if (currentPlugged) {
+            _powerState.value = _powerState.value.copy(isPlugged = false, isCharging = false, plugType = "Battery (Simulated)")
+            handlePowerDisconnected()
+        } else {
+            _powerState.value = _powerState.value.copy(isPlugged = true, isCharging = true, plugType = "AC Power (Simulated)")
+            handlePowerConnected()
         }
     }
 
@@ -130,7 +172,7 @@ class PowerMonitor(
                     "KioskLauncher:PowerPlugWake"
                 )
             }
-            wakeLock?.acquire(3000L) // 3 seconds acquire to wake display
+            wakeLock?.acquire(3000L)
         } catch (_: Exception) {}
     }
 

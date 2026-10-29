@@ -323,8 +323,8 @@ fun HudThemeTab(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = when (theme) {
+                                AutomotiveBrandTheme.TATA_PUNCH_EV -> "2026 Tata Punch EV / Nexon EV Facelift jade infotainment cluster with central rotary dial gauge."
                                 AutomotiveBrandTheme.TESLA -> "Cyber-slate minimalist theme with electric cyan telemetry and autopilot status."
-                                AutomotiveBrandTheme.TATA_EV -> "Modern Indian EV sports theme with Curvv/Nexon EV orange power and teal regen."
                                 AutomotiveBrandTheme.MONO_HUD -> "High-contrast monochrome green projection optimized for car windshield reflection."
                             },
                             style = MaterialTheme.typography.bodySmall,

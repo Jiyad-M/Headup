@@ -129,4 +129,23 @@ class ExampleRobolectricTest {
     val invalidShort = securityManager.updatePin("123")
     assertFalse(invalidShort)
   }
+
+  @Test
+  fun `test Tata Punch EV default theme selection`() {
+    val defaultTheme = AutomotiveBrandTheme.TATA_PUNCH_EV
+    assertEquals("Tata Punch EV 2026", defaultTheme.displayName)
+    assertNotNull(defaultTheme.primaryColor)
+    assertNotNull(defaultTheme.accentColor)
+  }
+
+  @Test
+  fun `test power unplug policy configuration`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+
+    prefs.sleepOnUnplugged = true
+    prefs.autoDisplayOnPlugged = true
+    assertTrue(prefs.sleepOnUnplugged)
+    assertTrue(prefs.autoDisplayOnPlugged)
+  }
 }

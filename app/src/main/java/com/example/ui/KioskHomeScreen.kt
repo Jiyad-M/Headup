@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,14 +48,15 @@ import com.example.ui.components.DisplaySleepOverlay
 import com.example.ui.components.KioskTopBar
 import com.example.ui.components.PaymentSoundboxCard
 import com.example.ui.components.PinUnlockDialog
-import com.example.ui.components.SplitResultDialog
-import com.example.ui.components.SplitScreenShortcutCard
 import com.example.ui.components.TwoWordsRecoveryDialog
 import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CockpitBlack
 import com.example.ui.theme.CockpitBorder
 import com.example.ui.theme.CockpitCard
 import com.example.ui.theme.HudCyan
+import com.example.ui.theme.TataPunchDarkJade
+import com.example.ui.theme.TataPunchJade
+import com.example.ui.theme.TataPunchMint
 
 @Composable
 fun KioskHomeScreen(viewModel: KioskViewModel) {
@@ -62,7 +64,9 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val permittedApps by viewModel.permittedApps.collectAsStateWithLifecycle()
     val allInstalledApps by viewModel.allInstalledApps.collectAsStateWithLifecycle()
     val powerState by viewModel.powerState.collectAsStateWithLifecycle()
-    val isDisplaySleeping by viewModel.isDisplaySleeping.collectAsStateWithLifecycle()
+    val isDefaultHome by viewModel.isDefaultHome.collectAsStateWithLifecycle()
+    val isDisplayCompletelyOff by viewModel.isDisplayCompletelyOff.collectAsStateWithLifecycle()
+    val unplugCountdown by viewModel.unplugCountdown.collectAsStateWithLifecycle()
     val isAnnouncing by viewModel.isAnnouncingPayment.collectAsStateWithLifecycle()
     val lastAnnouncedText by viewModel.lastAnnouncedText.collectAsStateWithLifecycle()
     val paymentHistory by viewModel.paymentHistory.collectAsStateWithLifecycle()
@@ -78,8 +82,6 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val remainingRecoveryTimeMillis by viewModel.remainingRecoveryTimeMillis.collectAsStateWithLifecycle()
 
     val showAdminSettings by viewModel.showAdminSettings.collectAsStateWithLifecycle()
-    val showSplitResult by viewModel.showSplitResultDialog.collectAsStateWithLifecycle()
-    val lastSplitResult by viewModel.lastSplitResult.collectAsStateWithLifecycle()
 
     val pinError by viewModel.pinError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
@@ -185,6 +187,49 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                     }
                 }
 
+                // Samsung One UI Home Conversion Banner ("When i press divice home bttn now going to samsung home it convert to app.")
+                if (!isDefaultHome) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(TataPunchDarkJade.copy(alpha = 0.45f))
+                            .border(1.dp, TataPunchJade, RoundedCornerShape(12.dp))
+                            .clickable { viewModel.promptSetDefaultLauncher() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .testTag("convert_home_banner")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = null,
+                                tint = TataPunchMint,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Convert Samsung Home Button to Kiosk",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Tap to make Kiosk Launcher the Default Home app. Pressing device Home stays in this app.",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = "ACTIVATE",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                                color = TataPunchMint
+                            )
+                        }
+                    }
+                }
+
                 // 2. Tesla / Tata EV Head-Up Display (HUD) Instrument Cluster
                 AutomotiveHudCluster(
                     powerState = powerState,
@@ -192,12 +237,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                     onThemeChange = { viewModel.setHudTheme(it) }
                 )
 
-                // 3. Uber Driver + Google Maps Split Screen Shortcut Card
-                SplitScreenShortcutCard(
-                    onLaunchSplitScreen = { viewModel.launchUberMapsSplitScreen() }
-                )
-
-                // 4. Allowed Apps Whitelist Grid (Hides unwanted apps)
+                // 3. Allowed Apps Whitelist Grid (Hides unwanted apps)
                 AllowedAppsGrid(
                     apps = permittedApps,
                     onAppClick = { pkg -> viewModel.launchApp(pkg) },
@@ -217,11 +257,11 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             }
         }
 
-        // 6. Power goes -> Display Sleep Overlay
+        // 6. Power Disconnected -> Complete Screen Light Blackout after 3s countdown (Screen OFF like power button)
         DisplaySleepOverlay(
-            isSleeping = isDisplaySleeping,
-            powerState = powerState,
-            onWakeTap = { viewModel.wakeDisplay() }
+            isCompletelyOff = isDisplayCompletelyOff,
+            countdownSec = unplugCountdown,
+            onSimulatePlugIn = { viewModel.togglePowerSimulation() }
         )
 
         // 7. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)
@@ -250,17 +290,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             )
         }
 
-        // 9. Split-Screen Launch feedback dialog
-        if (showSplitResult && lastSplitResult != null) {
-            SplitResultDialog(
-                result = lastSplitResult!!,
-                onDismiss = { viewModel.dismissSplitResultDialog() },
-                onInstallUber = { viewModel.appManager.openPlayStoreForUberDriver() },
-                onOpenMapsFallback = { viewModel.appManager.openMapsNavigationFallback() }
-            )
-        }
-
-        // 10. Admin Settings Sheet (Allowed apps, Power policies, PIN change, Soundbox config, Exit/Uninstall)
+        // 9. Admin Settings Sheet (Allowed apps, Power policies, PIN change, Soundbox config, Exit/Uninstall)
         if (showAdminSettings) {
             AdminSettingsSheet(
                 allApps = allInstalledApps,
