@@ -52,6 +52,7 @@ import com.example.ui.components.DisplaySleepOverlay
 import com.example.ui.components.KioskTopBar
 import com.example.ui.components.PaymentSoundboxCard
 import com.example.ui.components.PinUnlockDialog
+import com.example.ui.components.TataPunchCockpitView
 import com.example.ui.components.TwoWordsRecoveryDialog
 import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CockpitBlack
@@ -122,147 +123,28 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(CockpitBlack)
             .safeDrawingPadding()
     ) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = CockpitBlack,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                KioskTopBar(
-                    powerState = powerState,
-                    isAnnouncing = isAnnouncing,
-                    currentTheme = hudTheme,
-                    onLockClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
-                    onSoundboxClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
-                    onExitClick = { viewModel.requestExitKiosk() }
-                )
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState())
-                    .testTag("kiosk_main_content"),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Spacer(modifier = Modifier.height(4.dp))
+        // Primary Screen: 2026 Tata Punch EV Cockpit View (Matching Image 3)
+        TataPunchCockpitView(
+            permittedApps = permittedApps,
+            powerState = powerState,
+            isDefaultHome = isDefaultHome,
+            isAnnouncing = isAnnouncing,
+            lastAnnouncedText = lastAnnouncedText,
+            onAppClick = { pkg -> viewModel.launchApp(pkg) },
+            onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher() },
+            onOpenSettings = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
+            onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) }
+        )
 
-                // Notification Access Banner for GPay / UPI Auto-Chime
-                if (!isNotificationAccessGranted) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(AmberGold.copy(alpha = 0.15f))
-                            .border(1.dp, AmberGold, RoundedCornerShape(12.dp))
-                            .clickable { viewModel.openNotificationAccessSettings() }
-                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                            .testTag("notification_access_banner")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = AmberGold,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Enable GPay / UPI Payment Chime Listener",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "Tap to grant notification access so payment receipts speak automatically.",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                text = "ENABLE",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = AmberGold
-                            )
-                        }
-                    }
-                }
-
-                // Samsung One UI Home Conversion Banner ("When i press divice home bttn now going to samsung home it convert to app.")
-                if (!isDefaultHome) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(TataPunchDarkJade.copy(alpha = 0.45f))
-                            .border(1.dp, TataPunchJade, RoundedCornerShape(12.dp))
-                            .clickable { viewModel.promptSetDefaultLauncher() }
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                            .testTag("convert_home_banner")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = null,
-                                tint = TataPunchMint,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Convert Samsung Home Button to Kiosk",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = "Tap to make Kiosk Launcher the Default Home app. Pressing device Home stays in this app.",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                text = "ACTIVATE",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = TataPunchMint
-                            )
-                        }
-                    }
-                }
-
-                // 2. Tesla / Tata EV Head-Up Display (HUD) Instrument Cluster
-                AutomotiveHudCluster(
-                    powerState = powerState,
-                    currentTheme = hudTheme,
-                    onThemeChange = { viewModel.setHudTheme(it) }
-                )
-
-                // 3. Allowed Apps Whitelist Grid (Hides unwanted apps)
-                AllowedAppsGrid(
-                    apps = permittedApps,
-                    onAppClick = { pkg -> viewModel.launchApp(pkg) },
-                    onConfigureAppsClick = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) }
-                )
-
-                // 5. Payment Soundbox Card ("{Tone}{ payment amount} received")
-                PaymentSoundboxCard(
-                    currency = viewModel.preferences.currency,
-                    isAnnouncing = isAnnouncing,
-                    lastAnnouncedText = lastAnnouncedText,
-                    recentPayments = paymentHistory,
-                    onAnnounce = { amount -> viewModel.announcePayment(amount) }
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-        }
+        // Snackbar Host for status notifications
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 16.dp)
+        )
 
         // 6. Power Disconnected -> Complete Screen Light Blackout after 3s countdown (Screen OFF like power button)
         DisplaySleepOverlay(

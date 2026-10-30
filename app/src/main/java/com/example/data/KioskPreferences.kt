@@ -110,7 +110,7 @@ class KioskPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_KIOSK_LOCKED, value).apply()
 
     var hudTheme: String
-        get() = prefs.getString(KEY_HUD_THEME, "TESLA") ?: "TESLA"
+        get() = prefs.getString(KEY_HUD_THEME, "TATA_PUNCH_EV") ?: "TATA_PUNCH_EV"
         set(value) = prefs.edit().putString(KEY_HUD_THEME, value).apply()
 
     var isHudMirrored: Boolean

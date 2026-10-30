@@ -58,3 +58,12 @@ val PurpleAccent = Color(0xFF8B5CF6)
 val UberBlack = Color(0xFF000000)
 val MapsGreen = Color(0xFF34A853)
 val MapsBlue = Color(0xFF4285F4)
+
+// Image 3 Exact Cockpit Tokens
+val CockpitTealBgTop = Color(0xFF123E37)
+val CockpitTealBgBottom = Color(0xFF051714)
+val CockpitTealCardBg = Color(0xFF0A2E28)
+val CockpitTealCardBorder = Color(0xFF165246)
+val CockpitTealGlow = Color(0xFF00E5B3)
+val CockpitTealTrack = Color(0xFF061E1A)
+val CockpitBottomBarBg = Color(0xFF000000)
