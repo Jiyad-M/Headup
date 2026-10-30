@@ -81,6 +81,11 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
     val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
 
+    val gpsSpeed by viewModel.gpsSpeed.collectAsStateWithLifecycle()
+    val hasGpsFix by viewModel.hasGpsFix.collectAsStateWithLifecycle()
+    val gpsStatusText by viewModel.gpsStatusText.collectAsStateWithLifecycle()
+    val activePaymentAlert by viewModel.activePaymentAlert.collectAsStateWithLifecycle()
+
     val showPinDialog by viewModel.showPinDialog.collectAsStateWithLifecycle()
     val showTwoWordsDialog by viewModel.showTwoWordsDialog.collectAsStateWithLifecycle()
     val recoveryWord1 by viewModel.recoveryWord1.collectAsStateWithLifecycle()
@@ -132,10 +137,21 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             isDefaultHome = isDefaultHome,
             isAnnouncing = isAnnouncing,
             lastAnnouncedText = lastAnnouncedText,
+            gpsSpeed = gpsSpeed,
+            hasGpsFix = hasGpsFix,
+            gpsStatusText = gpsStatusText,
             onAppClick = { pkg -> viewModel.launchApp(pkg) },
             onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher() },
             onOpenSettings = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
-            onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) }
+            onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) },
+            onToggleGpsSimulation = { viewModel.toggleGpsSimulation() }
+        )
+
+        // Realistic GPay Soundbox Alert Overlay
+        com.example.ui.components.RealisticPaymentAlertCard(
+            payment = activePaymentAlert,
+            onDismiss = { viewModel.dismissPaymentAlert() },
+            modifier = Modifier.align(Alignment.TopCenter)
         )
 
         // Snackbar Host for status notifications

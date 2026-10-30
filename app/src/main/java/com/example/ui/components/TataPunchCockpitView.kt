@@ -105,18 +105,21 @@ fun TataPunchCockpitView(
     isDefaultHome: Boolean,
     isAnnouncing: Boolean,
     lastAnnouncedText: String,
+    gpsSpeed: Int = 0,
+    hasGpsFix: Boolean = false,
+    gpsStatusText: String = "GPS Ready",
     onAppClick: (String) -> Unit,
     onPromptSetDefaultLauncher: () -> Unit,
     onOpenSettings: () -> Unit,
     onQuickChimeTest: (Int) -> Unit,
+    onToggleGpsSimulation: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentTime by remember { mutableStateOf("09:20") }
     var currentDate by remember { mutableStateOf("Tue, 24 Feb") }
     var currentAmPm by remember { mutableStateOf("AM") }
-
-    var speed by remember { mutableIntStateOf(65) }
-    var isSimulatingDrive by remember { mutableStateOf(false) }
+    var currentHour12 by remember { mutableIntStateOf(9) }
+    var currentMinute by remember { mutableIntStateOf(20) }
 
     var isAcActive by remember { mutableStateOf(true) }
     var isAutoActive by remember { mutableStateOf(true) }
@@ -125,29 +128,19 @@ fun TataPunchCockpitView(
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val timeFormat = SimpleDateFormat("hh:mm", Locale.getDefault())
         val dateFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
         val amPmFormat = SimpleDateFormat("a", Locale.getDefault())
+        val hourFormat = SimpleDateFormat("hh", Locale.getDefault())
+        val minuteFormat = SimpleDateFormat("mm", Locale.getDefault())
         while (true) {
             val now = Date()
             currentTime = timeFormat.format(now)
             currentDate = dateFormat.format(now)
             currentAmPm = amPmFormat.format(now).uppercase()
+            currentHour12 = hourFormat.format(now).toIntOrNull() ?: 9
+            currentMinute = minuteFormat.format(now).toIntOrNull() ?: 20
             delay(1000)
-        }
-    }
-
-    LaunchedEffect(isSimulatingDrive) {
-        if (isSimulatingDrive) {
-            val sequence = listOf(65, 72, 80, 85, 90, 75, 60, 45, 30, 15, 0, 25, 45, 65)
-            for (target in sequence) {
-                while (speed != target) {
-                    speed += if (speed < target) 1 else -1
-                    delay(45)
-                }
-                delay(700)
-            }
-            isSimulatingDrive = false
         }
     }
 
@@ -348,10 +341,12 @@ fun TataPunchCockpitView(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left Panel: SPEEDOMETER
+                        // Left Panel: SPEEDOMETER (Driven by real GPS)
                         SpeedometerCockpitCard(
-                            speed = speed,
-                            onToggleDrive = { isSimulatingDrive = !isSimulatingDrive },
+                            speed = gpsSpeed,
+                            hasGpsFix = hasGpsFix,
+                            gpsStatusText = gpsStatusText,
+                            onToggleDrive = onToggleGpsSimulation,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -370,10 +365,12 @@ fun TataPunchCockpitView(
                                 .fillMaxHeight()
                         )
 
-                        // Right Panel: DIGITAL CLOCK
+                        // Right Panel: DIGITAL CLOCK (12h format + Round hour indicator ring)
                         DigitalClockCockpitCard(
                             timeString = currentTime,
                             amPm = currentAmPm,
+                            hour12 = currentHour12,
+                            minute = currentMinute,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -389,8 +386,10 @@ fun TataPunchCockpitView(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SpeedometerCockpitCard(
-                            speed = speed,
-                            onToggleDrive = { isSimulatingDrive = !isSimulatingDrive },
+                            speed = gpsSpeed,
+                            hasGpsFix = hasGpsFix,
+                            gpsStatusText = gpsStatusText,
+                            onToggleDrive = onToggleGpsSimulation,
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -411,6 +410,8 @@ fun TataPunchCockpitView(
                         DigitalClockCockpitCard(
                             timeString = currentTime,
                             amPm = currentAmPm,
+                            hour12 = currentHour12,
+                            minute = currentMinute,
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -504,6 +505,8 @@ fun TataPunchCockpitView(
 @Composable
 fun SpeedometerCockpitCard(
     speed: Int,
+    hasGpsFix: Boolean = false,
+    gpsStatusText: String = "GPS Ready",
     onToggleDrive: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -543,13 +546,13 @@ fun SpeedometerCockpitCard(
             ) {
                 val animatedSpeed by animateFloatAsState(
                     targetValue = speed.toFloat(),
-                    animationSpec = tween(durationMillis = 300),
+                    animationSpec = tween(durationMillis = 280),
                     label = "speed"
                 )
 
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val strokeWidth = 8.dp.toPx()
-                    val diameter = size.minDimension - strokeWidth
+                    val diameter = size.minDimension - strokeWidth - 6.dp.toPx()
                     val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
                     val arcSize = Size(diameter, diameter)
 
@@ -564,8 +567,8 @@ fun SpeedometerCockpitCard(
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                     )
 
-                    // Active Glowing Speed Arc
-                    val sweepProgress = (animatedSpeed / 140f).coerceIn(0.05f, 1f) * 270f
+                    // Active Glowing Speed Arc (0 to 160 km/h)
+                    val sweepProgress = (animatedSpeed / 160f).coerceIn(0.04f, 1f) * 270f
                     drawArc(
                         brush = Brush.sweepGradient(
                             listOf(TataPunchJade, CockpitTealGlow, TataPunchMint)
@@ -601,12 +604,26 @@ fun SpeedometerCockpitCard(
                 }
             }
 
-            // Subtle Hint
-            Text(
-                text = "Tap to simulate drive",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = TataEvTextMuted.copy(alpha = 0.7f)
-            )
+            // GPS Status Pill / Live Telemetry
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (hasGpsFix) TataPunchMint else Color(0xFFF59E0B))
+                )
+                Text(
+                    text = if (hasGpsFix) "GPS: $gpsStatusText" else "$gpsStatusText • Tap to test",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = if (hasGpsFix) TataPunchMint else TataEvTextMuted
+                )
+            }
         }
     }
 }
@@ -766,12 +783,14 @@ fun AllowedAppsCockpitCard(
 }
 
 // -------------------------------------------------------------
-// PANEL 3: DIGITAL CLOCK CARD
+// PANEL 3: DIGITAL CLOCK CARD (12H Dial Ring)
 // -------------------------------------------------------------
 @Composable
 fun DigitalClockCockpitCard(
     timeString: String,
     amPm: String,
+    hour12: Int = 12,
+    minute: Int = 0,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -798,7 +817,7 @@ fun DigitalClockCockpitCard(
                 color = TataEvTextLight.copy(alpha = 0.9f)
             )
 
-            // Clock Dial
+            // Clock Dial: 12-Hour circular ring indicating hours with ticks and glowing arc
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -807,25 +826,88 @@ fun DigitalClockCockpitCard(
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val strokeWidth = 5.dp.toPx()
-                    val diameter = size.minDimension - strokeWidth
+                    val strokeWidth = 6.dp.toPx()
+                    val diameter = size.minDimension - strokeWidth - 10.dp.toPx()
                     val center = Offset(size.width / 2f, size.height / 2f)
+                    val radius = diameter / 2f
+                    val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+                    val arcSize = Size(diameter, diameter)
 
                     // Inner background glow
                     drawCircle(
-                        color = CockpitTealTrack,
-                        radius = (diameter / 2f)
+                        color = CockpitTealTrack.copy(alpha = 0.4f),
+                        radius = radius,
+                        center = center
                     )
 
-                    // Outer glowing Teal/Mint Ring
+                    // Outer base track circle
                     drawCircle(
-                        color = CockpitTealGlow,
-                        radius = (diameter / 2f),
+                        color = CockpitTealTrack,
+                        radius = radius,
+                        center = center,
                         style = Stroke(width = strokeWidth)
+                    )
+
+                    // 12 Hour Ticks around the circular ring (30 degrees each)
+                    for (h in 0..11) {
+                        val angleDeg = (h * 30.0) - 90.0
+                        val angleRad = Math.toRadians(angleDeg)
+                        val isQuarter = (h % 3 == 0) // 12, 3, 6, 9
+                        val innerR = if (isQuarter) radius - 10.dp.toPx() else radius - 6.dp.toPx()
+                        val outerR = radius - 1.5.dp.toPx()
+
+                        val p1 = Offset(
+                            (center.x + innerR * Math.cos(angleRad)).toFloat(),
+                            (center.y + innerR * Math.sin(angleRad)).toFloat()
+                        )
+                        val p2 = Offset(
+                            (center.x + outerR * Math.cos(angleRad)).toFloat(),
+                            (center.y + outerR * Math.sin(angleRad)).toFloat()
+                        )
+
+                        val isPassedHour = (h <= (hour12 % 12))
+                        drawLine(
+                            color = if (isPassedHour) TataPunchMint else CockpitTealCardBorder,
+                            start = p1,
+                            end = p2,
+                            strokeWidth = if (isQuarter) 2.5.dp.toPx() else 1.5.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+
+                    // Active Glowing Hour Progress Arc around the ring (starts at top 12 o'clock / -90 deg)
+                    val hourRatio = ((hour12 % 12) + (minute / 60f)) / 12f
+                    val sweepAngle = (hourRatio * 360f).coerceIn(4f, 360f)
+
+                    drawArc(
+                        brush = Brush.sweepGradient(
+                            listOf(TataPunchJade, CockpitTealGlow, TataPunchMint)
+                        ),
+                        startAngle = -90f,
+                        sweepAngle = sweepAngle,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+
+                    // Glowing illuminated hour marker head
+                    val tipAngleRad = Math.toRadians(-90.0 + sweepAngle)
+                    val tipX = (center.x + radius * Math.cos(tipAngleRad)).toFloat()
+                    val tipY = (center.y + radius * Math.sin(tipAngleRad)).toFloat()
+                    drawCircle(
+                        color = Color.White,
+                        radius = 4.5.dp.toPx(),
+                        center = Offset(tipX, tipY)
+                    )
+                    drawCircle(
+                        color = CockpitTealGlow.copy(alpha = 0.5f),
+                        radius = 8.dp.toPx(),
+                        center = Offset(tipX, tipY)
                     )
                 }
 
-                // Digital Clock Display: "09:20" + "AM/PM"
+                // Digital Clock Display: 12-hour format "09:20" + "AM/PM"
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = timeString,
@@ -848,11 +930,11 @@ fun DigitalClockCockpitCard(
                 }
             }
 
-            // Bottom Subtitle: Ambient Temp
+            // Bottom Subtitle: 12H Ring indicator & Cockpit Temp
             Text(
-                text = "Cockpit Temp: 24.0°C",
+                text = "12H Dial Ring • Temp 24.0°C",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = TataEvTextMuted.copy(alpha = 0.7f)
+                color = TataEvTextMuted.copy(alpha = 0.85f)
             )
         }
     }

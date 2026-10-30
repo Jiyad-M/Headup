@@ -45,6 +45,7 @@ class KioskViewModel(
     val appManager = AppManager(application, preferences)
     val soundboxManager = PaymentSoundboxManager(application, preferences)
     val powerMonitor = PowerMonitor(activity, preferences)
+    val gpsSpeedometer = com.example.speed.GpsSpeedometerManager(application)
 
     private val _isActivated = MutableStateFlow(preferences.isActivated)
     val isActivated: StateFlow<Boolean> = _isActivated.asStateFlow()
@@ -114,9 +115,16 @@ class KioskViewModel(
     val unplugCountdown: StateFlow<Int?> = powerMonitor.unplugCountdown
     val isAnnouncingPayment: StateFlow<Boolean> = soundboxManager.isAnnouncing
     val lastAnnouncedText: StateFlow<String> = soundboxManager.lastAnnouncedText
+    val activePaymentAlert: StateFlow<PaymentRecord?> = soundboxManager.activePaymentAlert
+
+    val gpsSpeed: StateFlow<Int> = gpsSpeedometer.speedKmH
+    val hasGpsFix: StateFlow<Boolean> = gpsSpeedometer.hasGpsFix
+    val gpsStatusText: StateFlow<String> = gpsSpeedometer.gpsStatusText
 
     init {
         powerMonitor.startMonitoring()
+        gpsSpeedometer.startTracking()
+        com.example.service.KioskBackgroundService.start(application)
         refreshApps()
         loadPaymentHistory()
 
@@ -426,6 +434,14 @@ class KioskViewModel(
         powerMonitor.togglePowerSimulation()
     }
 
+    fun toggleGpsSimulation() {
+        gpsSpeedometer.toggleSimulation()
+    }
+
+    fun dismissPaymentAlert() {
+        soundboxManager.dismissActiveAlert()
+    }
+
     fun clearStatusMessage() {
         _statusMessage.value = null
     }
@@ -433,6 +449,7 @@ class KioskViewModel(
     override fun onCleared() {
         super.onCleared()
         powerMonitor.stopMonitoring()
+        gpsSpeedometer.stopTracking()
         soundboxManager.release()
         PaymentNotificationListenerService.onPaymentReceivedListener = null
         SmsRecoveryReceiver.onSmsRecoveryVerified = null
