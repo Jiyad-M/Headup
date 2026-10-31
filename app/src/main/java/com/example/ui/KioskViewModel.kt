@@ -122,11 +122,30 @@ class KioskViewModel(
     val gpsStatusText: StateFlow<String> = gpsSpeedometer.gpsStatusText
 
     init {
-        powerMonitor.startMonitoring()
-        gpsSpeedometer.startTracking()
-        com.example.service.KioskBackgroundService.start(application)
-        refreshApps()
-        loadPaymentHistory()
+        try {
+            powerMonitor.startMonitoring()
+        } catch (e: Exception) {
+            android.util.Log.e("KioskViewModel", "powerMonitor init failed", e)
+        }
+
+        try {
+            gpsSpeedometer.startTracking()
+        } catch (e: Exception) {
+            android.util.Log.e("KioskViewModel", "gpsSpeedometer init failed", e)
+        }
+
+        try {
+            com.example.service.KioskBackgroundService.start(application)
+        } catch (e: Exception) {
+            android.util.Log.e("KioskViewModel", "KioskBackgroundService start failed", e)
+        }
+
+        try {
+            refreshApps()
+            loadPaymentHistory()
+        } catch (e: Exception) {
+            android.util.Log.e("KioskViewModel", "data loading failed", e)
+        }
 
         PaymentNotificationListenerService.onPaymentReceivedListener = { amount, _ ->
             loadPaymentHistory()

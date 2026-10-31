@@ -61,14 +61,35 @@ class KioskBackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        preferences = KioskPreferences(applicationContext)
-        appManager = AppManager(applicationContext, preferences)
+        try {
+            preferences = KioskPreferences(applicationContext)
+            appManager = AppManager(applicationContext, preferences)
 
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+            createNotificationChannel()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service", e)
+        }
 
-        acquireWakeLock()
-        startAppRestrictionMonitoring()
+        try {
+            acquireWakeLock()
+        } catch (e: Exception) {
+            Log.w(TAG, "WakeLock acquire error", e)
+        }
+
+        try {
+            startAppRestrictionMonitoring()
+        } catch (e: Exception) {
+            Log.w(TAG, "Monitoring start error", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

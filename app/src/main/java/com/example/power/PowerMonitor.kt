@@ -94,13 +94,22 @@ class PowerMonitor(
     private var hasPerformedInitialCheck = false
 
     fun startMonitoring() {
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_POWER_CONNECTED)
-            addAction(Intent.ACTION_POWER_DISCONNECTED)
-            addAction(Intent.ACTION_BATTERY_CHANGED)
+        try {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_POWER_DISCONNECTED)
+                addAction(Intent.ACTION_BATTERY_CHANGED)
+            }
+            val stickyIntent = androidx.core.content.ContextCompat.registerReceiver(
+                activity,
+                receiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            )
+            stickyIntent?.let { receiver.onReceive(activity, it) }
+        } catch (e: Exception) {
+            android.util.Log.e("PowerMonitor", "Error registering power receiver", e)
         }
-        val stickyIntent = activity.registerReceiver(receiver, filter)
-        stickyIntent?.let { receiver.onReceive(activity, it) }
     }
 
     fun stopMonitoring() {

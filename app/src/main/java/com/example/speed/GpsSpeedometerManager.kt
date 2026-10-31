@@ -40,6 +40,19 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
             return
         }
 
+        val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) {
+            _gpsStatusText.value = "GPS Permission Needed"
+            return
+        }
+
         try {
             val isGpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
             val isNetworkEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
