@@ -29,11 +29,18 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Power
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -73,6 +80,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.model.AppItem
 import com.example.model.PaymentRecord
+import com.example.model.SoundboxTone
+import com.example.model.VoiceGender
 import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CockpitBlack
 import com.example.ui.theme.CockpitBorder
@@ -100,6 +109,8 @@ fun AdminSettingsSheet(
     currency: String,
     paymentHistory: List<PaymentRecord>,
     currentTheme: AutomotiveBrandTheme,
+    selectedVoiceGender: VoiceGender = VoiceGender.MALE,
+    selectedTone: SoundboxTone = SoundboxTone.PAYTM_TRIAD,
     onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onToggleAppBlacklisted: (String, Boolean) -> Unit = { _, _ -> },
@@ -107,6 +118,10 @@ fun AdminSettingsSheet(
     onUpdateSecondaryPhone: (String) -> Unit,
     onUpdatePowerSettings: (Boolean, Boolean) -> Unit,
     onUpdateCurrency: (String) -> Unit,
+    onVoiceGenderChange: (VoiceGender) -> Unit = {},
+    onSoundboxToneChange: (SoundboxTone) -> Unit = {},
+    onPreviewTone: (SoundboxTone) -> Unit = {},
+    onPreviewVoice: (VoiceGender) -> Unit = {},
     onTestAnnouncement: (Double) -> Unit,
     onRequestExit: () -> Unit,
     onRequestUninstall: () -> Unit,
@@ -228,8 +243,14 @@ fun AdminSettingsSheet(
                         )
                         4 -> SoundboxSettingsTab(
                             currency = currency,
+                            selectedVoiceGender = selectedVoiceGender,
+                            selectedTone = selectedTone,
                             paymentHistory = paymentHistory,
                             onUpdateCurrency = onUpdateCurrency,
+                            onVoiceGenderChange = onVoiceGenderChange,
+                            onSoundboxToneChange = onSoundboxToneChange,
+                            onPreviewTone = onPreviewTone,
+                            onPreviewVoice = onPreviewVoice,
                             onTestAnnouncement = onTestAnnouncement
                         )
                     }
@@ -851,146 +872,374 @@ fun SecurityAndExitTab(
 @Composable
 fun SoundboxSettingsTab(
     currency: String,
+    selectedVoiceGender: VoiceGender,
+    selectedTone: SoundboxTone,
     paymentHistory: List<PaymentRecord>,
     onUpdateCurrency: (String) -> Unit,
+    onVoiceGenderChange: (VoiceGender) -> Unit,
+    onSoundboxToneChange: (SoundboxTone) -> Unit,
+    onPreviewTone: (SoundboxTone) -> Unit,
+    onPreviewVoice: (VoiceGender) -> Unit,
     onTestAnnouncement: (Double) -> Unit
 ) {
     val currencies = listOf("$", "₹", "€", "£", "¥", "₩")
 
-    Column(
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text = "Payment Soundbox & Voice Chime",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
-        )
+        item {
+            Text(
+                text = "Payment Soundbox Voice & Chime Settings",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+        }
 
-        // Currency Selector
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CockpitCard),
-            border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "Active Currency Symbol",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // 1. Voice Gender Selection (Male / Female)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    currencies.forEach { curr ->
-                        val isSelected = curr == currency
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) HudMint else CockpitSurface)
-                                .border(1.dp, if (isSelected) HudMint else CockpitBorder, RoundedCornerShape(10.dp))
-                                .clickable { onUpdateCurrency(curr) }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = curr,
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) CockpitBlack else Color.White
-                            )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RecordVoiceOver,
+                            contentDescription = null,
+                            tint = HudMint,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Soundbox Voice Gender",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = "Select male or female announcement voice for realistic payment notifications.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        VoiceGender.entries.forEach { gender ->
+                            val isSelected = gender == selectedVoiceGender
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onVoiceGenderChange(gender) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) HudMint.copy(alpha = 0.15f) else CockpitSurface
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.5.dp,
+                                    if (isSelected) HudMint else CockpitBorder
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (gender == VoiceGender.MALE) "👨 Male" else "👩 Female",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = if (isSelected) HudMint else Color.White
+                                        )
+                                        Icon(
+                                            imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = null,
+                                            tint = if (isSelected) HudMint else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Text(
+                                        text = gender.subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        minLines = 2,
+                                        maxLines = 2
+                                    )
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            onVoiceGenderChange(gender)
+                                            onPreviewVoice(gender)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isSelected) HudMint else CockpitBorder
+                                        ),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = if (isSelected) HudMint else Color.White
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.VolumeUp,
+                                            contentDescription = "Test Voice",
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Preview", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Test Voice Announcement
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CockpitCard),
-            border = androidx.compose.foundation.BorderStroke(1.dp, HudMint.copy(alpha = 0.4f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "Test Voice Announcement",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
-                )
-                Text(
-                    text = "Format: {Beep} {amount} received • Male Voice",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Button(
-                    onClick = { onTestAnnouncement(110.0) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = HudMint, contentColor = CockpitBlack)
+        // 2. Chime Tone Options Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Play Test: \"[Beep] 110 ${if (currency == "₹") "rupees" else "received"}\"", fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = HudCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Soundbox Alert Chime Tone",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = "Choose the bell melody played immediately prior to the voice announcement.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SoundboxTone.entries.forEach { tone ->
+                            val isSelected = tone == selectedTone
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isSelected) HudCyan.copy(alpha = 0.15f) else CockpitSurface)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) HudCyan else CockpitBorder,
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .clickable {
+                                        onSoundboxToneChange(tone)
+                                        onPreviewTone(tone)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                        contentDescription = null,
+                                        tint = if (isSelected) HudCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+
+                                    Column {
+                                        Text(
+                                            text = tone.displayName,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = if (isSelected) HudCyan else Color.White
+                                        )
+                                        Text(
+                                            text = tone.subtitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = { onPreviewTone(tone) },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Preview ${tone.displayName}",
+                                        tint = if (isSelected) HudCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Recent Payments Log
-        Text(
-            text = "Payment Announcement History (${paymentHistory.size})",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
-        )
-
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            if (paymentHistory.isEmpty()) {
-                item {
+        // 3. Currency Selector
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "No payments announced yet.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Active Currency Symbol",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
                     )
-                }
-            } else {
-                items(paymentHistory, key = { it.id }) { record ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(CockpitCard)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = record.announcementText,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = HudMint
-                            )
-                            Text(
-                                text = record.formattedTime,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
 
-                        IconButton(onClick = { onTestAnnouncement(record.amount) }) {
-                            Icon(
-                                imageVector = Icons.Default.Campaign,
-                                contentDescription = "Replay",
-                                tint = HudMint,
-                                modifier = Modifier.size(20.dp)
-                            )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        currencies.forEach { curr ->
+                            val isSelected = curr == currency
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) HudMint else CockpitSurface)
+                                    .border(1.dp, if (isSelected) HudMint else CockpitBorder, RoundedCornerShape(10.dp))
+                                    .clickable { onUpdateCurrency(curr) }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = curr,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSelected) CockpitBlack else Color.White
+                                )
+                            }
                         }
+                    }
+                }
+            }
+        }
+
+        // 4. Test Complete Soundbox Alert Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, HudMint.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Test Complete Soundbox Alert",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Current: ${selectedTone.displayName} • ${selectedVoiceGender.displayName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = HudMint
+                    )
+
+                    Button(
+                        onClick = { onTestAnnouncement(150.0) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = HudMint, contentColor = CockpitBlack)
+                    ) {
+                        Icon(imageVector = Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Play Alert: [Chime] 150 ${if (currency == "₹") "rupees" else "received"} on Paytm / UPI",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. Recent Payments History
+        item {
+            Text(
+                text = "Payment Announcement History (${paymentHistory.size})",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+        }
+
+        if (paymentHistory.isEmpty()) {
+            item {
+                Text(
+                    text = "No payments announced yet. Soundbox will announce whenever payment notifications or SMS arrive.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            items(paymentHistory, key = { it.id }) { record ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(CockpitCard)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = record.announcementText,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = HudMint
+                        )
+                        Text(
+                            text = record.formattedTime,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    IconButton(onClick = { onTestAnnouncement(record.amount) }) {
+                        Icon(
+                            imageVector = Icons.Default.Campaign,
+                            contentDescription = "Replay",
+                            tint = HudMint,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }

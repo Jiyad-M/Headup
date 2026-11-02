@@ -13,6 +13,8 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import com.example.data.KioskPreferences
 import com.example.model.PaymentRecord
+import com.example.model.SoundboxTone
+import com.example.model.VoiceGender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -60,7 +62,7 @@ class PaymentSoundboxManager(
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.setLanguage(Locale.US)
             }
-            configureMaleVoice()
+            applyConfiguredVoice()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
                 override fun onDone(utteranceId: String?) {
@@ -80,45 +82,73 @@ class PaymentSoundboxManager(
     }
 
     /**
-     * Configures a distinct, authoritative male voice for realistic Soundbox behavior.
+     * Applies voice configuration based on user preference (Male vs Female).
      */
-    private fun configureMaleVoice() {
+    fun applyConfiguredVoice() {
+        val gender = try {
+            VoiceGender.valueOf(preferences.voiceGender)
+        } catch (_: Exception) {
+            VoiceGender.MALE
+        }
+        configureVoice(gender)
+    }
+
+    fun configureVoice(gender: VoiceGender) {
         try {
             val voices = tts?.voices
             if (!voices.isNullOrEmpty()) {
                 val currentLocale = tts?.language ?: Locale.getDefault()
                 val matchingLocaleVoices = voices.filter { it.locale.language == currentLocale.language }
 
-                val maleVoice = matchingLocaleVoices.find { voice ->
-                    val name = voice.name.lowercase(Locale.ROOT)
-                    (name.contains("male") && !name.contains("female")) ||
-                            name.contains("-m-") ||
-                            name.contains("man") ||
-                            name.contains("#male")
-                } ?: voices.find { voice ->
-                    val name = voice.name.lowercase(Locale.ROOT)
-                    (name.contains("male") && !name.contains("female")) ||
-                            name.contains("-m-") ||
-                            name.contains("#male")
-                } ?: matchingLocaleVoices.firstOrNull { !it.isNetworkConnectionRequired }
+                val selectedVoice = if (gender == VoiceGender.MALE) {
+                    matchingLocaleVoices.find { voice ->
+                        val name = voice.name.lowercase(Locale.ROOT)
+                        (name.contains("male") && !name.contains("female")) ||
+                                name.contains("-m-") ||
+                                name.contains("man") ||
+                                name.contains("#male")
+                    } ?: voices.find { voice ->
+                        val name = voice.name.lowercase(Locale.ROOT)
+                        (name.contains("male") && !name.contains("female")) ||
+                                name.contains("-m-") ||
+                                name.contains("#male")
+                    } ?: matchingLocaleVoices.firstOrNull { !it.isNetworkConnectionRequired }
+                } else {
+                    matchingLocaleVoices.find { voice ->
+                        val name = voice.name.lowercase(Locale.ROOT)
+                        name.contains("female") ||
+                                name.contains("-f-") ||
+                                name.contains("woman") ||
+                                name.contains("#female")
+                    } ?: voices.find { voice ->
+                        val name = voice.name.lowercase(Locale.ROOT)
+                        name.contains("female") ||
+                                name.contains("-f-") ||
+                                name.contains("#female")
+                    } ?: matchingLocaleVoices.firstOrNull { !it.isNetworkConnectionRequired }
+                }
 
-                if (maleVoice != null) {
-                    tts?.voice = maleVoice
-                    Log.d("Soundbox", "Selected male voice: ${maleVoice.name}")
+                if (selectedVoice != null) {
+                    tts?.voice = selectedVoice
+                    Log.d("Soundbox", "Selected ${gender.name} voice: ${selectedVoice.name}")
                 }
             }
         } catch (e: Exception) {
-            Log.w("Soundbox", "Error selecting male voice", e)
+            Log.w("Soundbox", "Error configuring voice for $gender", e)
         }
 
-        // Deep authoritative male pitch (0.78f) and natural pacing (0.92f)
-        tts?.setPitch(0.78f)
-        tts?.setSpeechRate(0.92f)
+        if (gender == VoiceGender.MALE) {
+            tts?.setPitch(0.78f) // Deep authoritative masculine pitch
+            tts?.setSpeechRate(0.92f)
+        } else {
+            tts?.setPitch(1.15f) // Clear melodic feminine pitch
+            tts?.setSpeechRate(0.98f)
+        }
     }
 
     /**
-     * Announces received payment with realistic Soundbox chime followed by clear male voice announcement:
-     * e.g. [Realistic Melodic Chime] -> "One hundred ten rupees received"
+     * Announces received payment with the selected chime tone followed by the selected voice:
+     * e.g. [Selected Tone] -> "110 rupees received"
      */
     fun announcePayment(
         amount: Double,
@@ -152,14 +182,15 @@ class PaymentSoundboxManager(
             _activePaymentAlert.value = record
             onComplete?.invoke(record)
 
-            // 1. Play Realistic Soundbox 3-Tone Melodic Chime (C5 -> E5 -> G5)
-            playRealisticSoundboxChime()
+            // 1. Play Configured Chime Tone
+            val tone = SoundboxTone.fromId(preferences.soundboxTone)
+            playTone(tone)
 
-            // Short pause between chime and speech
-            delay(550)
+            // Pause between chime and voice
+            delay(520)
 
-            // 2. Speak the amount in deep male voice
-            configureMaleVoice()
+            // 2. Speak amount in configured Voice (Male / Female)
+            applyConfiguredVoice()
             val speechText = "$formattedAmount $currencyWord received"
 
             if (isTtsReady && tts != null) {
@@ -173,24 +204,56 @@ class PaymentSoundboxManager(
         }
     }
 
+    /**
+     * Previews/speaks a short voice test sample for the selected gender.
+     */
+    fun testVoicePreview(gender: VoiceGender) {
+        configureVoice(gender)
+        val sampleText = if (gender == VoiceGender.MALE) {
+            "Male voice active. 100 rupees received."
+        } else {
+            "Female voice active. 100 rupees received."
+        }
+        if (isTtsReady && tts != null) {
+            tts?.speak(sampleText, TextToSpeech.QUEUE_FLUSH, null, "TEST_VOICE_${System.currentTimeMillis()}")
+        }
+    }
+
     fun dismissActiveAlert() {
         _activePaymentAlert.value = null
     }
 
     /**
-     * Generates a high-fidelity 3-tone chime (523Hz C5 -> 659Hz E5 -> 784Hz G5)
-     * with exponential bell decay curve, mimicking official merchant soundboxes.
+     * Plays a specific Soundbox tone using synthesized PCM sine waves with exponential decay.
      */
-    private fun playRealisticSoundboxChime() {
+    fun playTone(tone: SoundboxTone) {
         Thread {
             try {
                 val sampleRate = 44100
-                // Chime notes: C5 (523.25Hz, 140ms), E5 (659.25Hz, 140ms), G5 (783.99Hz, 260ms)
-                val notes = listOf(
-                    Pair(523.25, 0.14),
-                    Pair(659.25, 0.14),
-                    Pair(783.99, 0.26)
-                )
+                val notes: List<Pair<Double, Double>> = when (tone) {
+                    SoundboxTone.PAYTM_TRIAD -> listOf(
+                        Pair(523.25, 0.13), // C5
+                        Pair(659.25, 0.13), // E5
+                        Pair(783.99, 0.25)  // G5
+                    )
+                    SoundboxTone.PHONEPE_DING -> listOf(
+                        Pair(659.25, 0.11), // E5
+                        Pair(987.77, 0.28)  // B5
+                    )
+                    SoundboxTone.GPAY_MARIMBA -> listOf(
+                        Pair(783.99, 0.12), // G5
+                        Pair(1046.50, 0.26) // C6
+                    )
+                    SoundboxTone.CLASSIC_BEEP -> listOf(
+                        Pair(980.0, 0.22)   // Crisp 980Hz
+                    )
+                    SoundboxTone.CRYSTAL_HARP -> listOf(
+                        Pair(523.25, 0.08), // C5
+                        Pair(783.99, 0.08), // G5
+                        Pair(1046.50, 0.09), // C6
+                        Pair(1318.51, 0.24) // E6
+                    )
+                }
 
                 var totalSamples = 0
                 for (note in notes) {
@@ -207,11 +270,9 @@ class PaymentSoundboxManager(
 
                     for (i in 0 until noteSamples) {
                         val t = i.toDouble() / sampleRate
-                        // Bell decay envelope
-                        val envelope = exp(-4.0 * (t / durSec))
-                        // Harmonic richness (fundamental + soft 2nd harmonic)
-                        val sample = (sin(2.0 * Math.PI * freq * t) * 0.8 +
-                                sin(4.0 * Math.PI * freq * t) * 0.2) * envelope
+                        val envelope = exp(-3.8 * (t / durSec))
+                        val sample = (sin(2.0 * Math.PI * freq * t) * 0.82 +
+                                sin(4.0 * Math.PI * freq * t) * 0.18) * envelope
 
                         pcmSamples[offset + i] = (sample * Short.MAX_VALUE * 0.95).toInt().toShort()
                     }
@@ -238,15 +299,16 @@ class PaymentSoundboxManager(
 
                 audioTrack.write(pcmSamples, 0, pcmSamples.size)
                 audioTrack.play()
-                Thread.sleep(580)
+                val totalDurationMs = (notes.sumOf { it.second } * 1000).toLong() + 50
+                Thread.sleep(totalDurationMs)
                 audioTrack.stop()
                 audioTrack.release()
             } catch (e: Exception) {
-                Log.w("Soundbox", "AudioTrack chime failed, falling back to tone gen", e)
+                Log.w("Soundbox", "AudioTrack tone playback failed, falling back to tone gen", e)
                 try {
-                    val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                    tone.startTone(ToneGenerator.TONE_PROP_BEEP, 300)
-                    mainHandler.postDelayed({ tone.release() }, 400)
+                    val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 300)
+                    mainHandler.postDelayed({ toneGen.release() }, 400)
                 } catch (_: Exception) {}
             }
         }.start()

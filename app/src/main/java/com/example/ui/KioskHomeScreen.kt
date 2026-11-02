@@ -78,6 +78,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val lastAnnouncedText by viewModel.lastAnnouncedText.collectAsStateWithLifecycle()
     val paymentHistory by viewModel.paymentHistory.collectAsStateWithLifecycle()
     val hudTheme by viewModel.hudTheme.collectAsStateWithLifecycle()
+    val voiceGender by viewModel.voiceGender.collectAsStateWithLifecycle()
+    val soundboxTone by viewModel.soundboxTone.collectAsStateWithLifecycle()
     val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
     val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
 
@@ -205,6 +207,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 currency = viewModel.preferences.currency,
                 paymentHistory = paymentHistory,
                 currentTheme = hudTheme,
+                selectedVoiceGender = voiceGender,
+                selectedTone = soundboxTone,
                 onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },
                 onToggleAppBlacklisted = { pkg, blacklisted -> viewModel.toggleAppBlacklisted(pkg, blacklisted) },
@@ -212,6 +216,10 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 onUpdateSecondaryPhone = { phone -> viewModel.updateSecondaryPhone(phone) },
                 onUpdatePowerSettings = { disp, sleep -> viewModel.updatePowerSettings(disp, sleep) },
                 onUpdateCurrency = { curr -> viewModel.updateCurrency(curr) },
+                onVoiceGenderChange = { viewModel.setVoiceGender(it) },
+                onSoundboxToneChange = { viewModel.setSoundboxTone(it) },
+                onPreviewTone = { viewModel.previewTone(it) },
+                onPreviewVoice = { viewModel.previewVoice(it) },
                 onTestAnnouncement = { amt -> viewModel.announcePayment(amt) },
                 onRequestExit = {
                     viewModel.closeAdminSettings()

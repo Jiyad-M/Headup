@@ -175,4 +175,49 @@ class ExampleRobolectricTest {
     assertTrue(prefs.blacklistedPackages.contains("com.random.unapproved"))
     assertFalse(appManager.isPackageAllowed("com.random.unapproved"))
   }
+
+  @Test
+  fun `test Soundbox voice gender and tone configurations`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+
+    // Check default voice gender and tone
+    assertEquals("MALE", prefs.voiceGender)
+    assertEquals("PAYTM_TRIAD", prefs.soundboxTone)
+
+    // Verify all VoiceGender entries
+    assertEquals(2, com.example.model.VoiceGender.entries.size)
+    val male = com.example.model.VoiceGender.MALE
+    val female = com.example.model.VoiceGender.FEMALE
+    assertEquals("Male Voice", male.displayName)
+    assertEquals("Female Voice", female.displayName)
+
+    // Verify all SoundboxTone entries
+    assertEquals(5, com.example.model.SoundboxTone.entries.size)
+    val paytm = com.example.model.SoundboxTone.PAYTM_TRIAD
+    val phonepe = com.example.model.SoundboxTone.PHONEPE_DING
+    val gpay = com.example.model.SoundboxTone.GPAY_MARIMBA
+    val beep = com.example.model.SoundboxTone.CLASSIC_BEEP
+    val harp = com.example.model.SoundboxTone.CRYSTAL_HARP
+
+    assertEquals("Paytm / UPI Triad", paytm.displayName)
+    assertEquals("PhonePe Double Ding", phonepe.displayName)
+    assertEquals("Google Pay Warm Chime", gpay.displayName)
+    assertEquals("Soundbox Sharp Beep", beep.displayName)
+    assertEquals("Crystal 4-Tone Harp", harp.displayName)
+
+    // Verify SoundboxTone.fromId lookup
+    assertEquals(paytm, com.example.model.SoundboxTone.fromId("PAYTM_TRIAD"))
+    assertEquals(phonepe, com.example.model.SoundboxTone.fromId("PHONEPE_DING"))
+    assertEquals(gpay, com.example.model.SoundboxTone.fromId("GPAY_MARIMBA"))
+    assertEquals(beep, com.example.model.SoundboxTone.fromId("CLASSIC_BEEP"))
+    assertEquals(harp, com.example.model.SoundboxTone.fromId("CRYSTAL_HARP"))
+    assertEquals(paytm, com.example.model.SoundboxTone.fromId("UNKNOWN_TONE"))
+
+    // Test saving preferences
+    prefs.voiceGender = female.name
+    prefs.soundboxTone = phonepe.id
+    assertEquals("FEMALE", prefs.voiceGender)
+    assertEquals("PHONEPE_DING", prefs.soundboxTone)
+  }
 }

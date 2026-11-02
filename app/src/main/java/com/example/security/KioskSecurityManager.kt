@@ -102,10 +102,10 @@ class KioskSecurityManager(
     fun createOtpChallenge(): OtpChallenge {
         val random = SecureRandom()
         val (w1, w2) = generateTwoRandomWords()
-        val numericSalt = String.format("%04d", random.nextInt(10000))
+        val numericSalt = String.format(java.util.Locale.US, "%04d", random.nextInt(10000))
         val words = "$w1 - $w2 - $numericSalt"
 
-        val otp = String.format("%06d", random.nextInt(1000000))
+        val otp = String.format(java.util.Locale.US, "%06d", random.nextInt(1000000))
         val challenge = OtpChallenge(
             challengeWords = "$w1 $w2",
             otpCode = otp,

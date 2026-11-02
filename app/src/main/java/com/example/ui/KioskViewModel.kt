@@ -18,6 +18,8 @@ import com.example.model.AppItem
 import com.example.model.OtpChallenge
 import com.example.model.PaymentRecord
 import com.example.model.PowerState
+import com.example.model.SoundboxTone
+import com.example.model.VoiceGender
 import com.example.power.PowerMonitor
 import com.example.security.KioskSecurityManager
 import com.example.security.SmsRecoveryReceiver
@@ -116,6 +118,20 @@ class KioskViewModel(
     val isAnnouncingPayment: StateFlow<Boolean> = soundboxManager.isAnnouncing
     val lastAnnouncedText: StateFlow<String> = soundboxManager.lastAnnouncedText
     val activePaymentAlert: StateFlow<PaymentRecord?> = soundboxManager.activePaymentAlert
+
+    private val _voiceGender = MutableStateFlow(
+        try {
+            VoiceGender.valueOf(preferences.voiceGender)
+        } catch (_: Exception) {
+            VoiceGender.MALE
+        }
+    )
+    val voiceGender: StateFlow<VoiceGender> = _voiceGender.asStateFlow()
+
+    private val _soundboxTone = MutableStateFlow(
+        SoundboxTone.fromId(preferences.soundboxTone)
+    )
+    val soundboxTone: StateFlow<SoundboxTone> = _soundboxTone.asStateFlow()
 
     val gpsSpeed: StateFlow<Int> = gpsSpeedometer.speedKmH
     val hasGpsFix: StateFlow<Boolean> = gpsSpeedometer.hasGpsFix
@@ -459,6 +475,27 @@ class KioskViewModel(
 
     fun dismissPaymentAlert() {
         soundboxManager.dismissActiveAlert()
+    }
+
+    fun setVoiceGender(gender: VoiceGender) {
+        preferences.voiceGender = gender.name
+        _voiceGender.value = gender
+        soundboxManager.configureVoice(gender)
+        _statusMessage.value = "${gender.displayName} selected"
+    }
+
+    fun setSoundboxTone(tone: SoundboxTone) {
+        preferences.soundboxTone = tone.id
+        _soundboxTone.value = tone
+        _statusMessage.value = "${tone.displayName} selected"
+    }
+
+    fun previewTone(tone: SoundboxTone) {
+        soundboxManager.playTone(tone)
+    }
+
+    fun previewVoice(gender: VoiceGender) {
+        soundboxManager.testVoicePreview(gender)
     }
 
     fun clearStatusMessage() {

@@ -192,7 +192,7 @@ fun RealisticPaymentAlertCard(
                             val formattedAmount = if (payment.amount % 1.0 == 0.0) {
                                 "${payment.amount.toInt()}"
                             } else {
-                                String.format("%.2f", payment.amount)
+                                String.format(java.util.Locale.US, "%.2f", payment.amount)
                             }
                             Text(
                                 text = "${payment.currency} $formattedAmount",
