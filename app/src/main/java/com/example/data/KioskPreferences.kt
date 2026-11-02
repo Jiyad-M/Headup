@@ -25,6 +25,7 @@ class KioskPreferences(context: Context) {
         private const val KEY_HUD_MIRRORED = "kiosk_hud_mirrored"
         private const val KEY_VOICE_GENDER = "kiosk_voice_gender"
         private const val KEY_SOUNDBOX_TONE = "kiosk_soundbox_tone"
+        private const val KEY_SPEECH_ENGINE = "kiosk_speech_engine"
 
         // Account Activation & Recovery Keys
         private const val KEY_IS_ACTIVATED = "kiosk_is_activated"
@@ -126,6 +127,10 @@ class KioskPreferences(context: Context) {
     var soundboxTone: String
         get() = prefs.getString(KEY_SOUNDBOX_TONE, "PAYTM_TRIAD") ?: "PAYTM_TRIAD"
         set(value) = prefs.edit().putString(KEY_SOUNDBOX_TONE, value).apply()
+
+    var speechEngine: String
+        get() = prefs.getString(KEY_SPEECH_ENGINE, "NATURAL_CLOUD") ?: "NATURAL_CLOUD"
+        set(value) = prefs.edit().putString(KEY_SPEECH_ENGINE, value).apply()
 
     fun getPaymentHistory(): List<PaymentRecord> {
         val json = prefs.getString(KEY_PAYMENT_HISTORY, null) ?: return emptyList()

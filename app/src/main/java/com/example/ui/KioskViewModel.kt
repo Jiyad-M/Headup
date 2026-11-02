@@ -19,6 +19,7 @@ import com.example.model.OtpChallenge
 import com.example.model.PaymentRecord
 import com.example.model.PowerState
 import com.example.model.SoundboxTone
+import com.example.model.SpeechEngine
 import com.example.model.VoiceGender
 import com.example.power.PowerMonitor
 import com.example.security.KioskSecurityManager
@@ -132,6 +133,11 @@ class KioskViewModel(
         SoundboxTone.fromId(preferences.soundboxTone)
     )
     val soundboxTone: StateFlow<SoundboxTone> = _soundboxTone.asStateFlow()
+
+    private val _speechEngine = MutableStateFlow(
+        SpeechEngine.fromId(preferences.speechEngine)
+    )
+    val speechEngine: StateFlow<SpeechEngine> = _speechEngine.asStateFlow()
 
     val gpsSpeed: StateFlow<Int> = gpsSpeedometer.speedKmH
     val hasGpsFix: StateFlow<Boolean> = gpsSpeedometer.hasGpsFix
@@ -492,6 +498,19 @@ class KioskViewModel(
 
     fun previewTone(tone: SoundboxTone) {
         soundboxManager.playTone(tone)
+    }
+
+    fun setSpeechEngine(engine: SpeechEngine) {
+        preferences.speechEngine = engine.id
+        _speechEngine.value = engine
+        soundboxManager.initTtsEngine(engine)
+        _statusMessage.value = "${engine.displayName} selected"
+    }
+
+    fun enforceDefaultLauncherIfActive() {
+        if (preferences.isActivated && !checkIsDefaultHome()) {
+            promptSetDefaultLauncher()
+        }
     }
 
     fun previewVoice(gender: VoiceGender) {

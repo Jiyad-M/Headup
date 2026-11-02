@@ -80,6 +80,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val hudTheme by viewModel.hudTheme.collectAsStateWithLifecycle()
     val voiceGender by viewModel.voiceGender.collectAsStateWithLifecycle()
     val soundboxTone by viewModel.soundboxTone.collectAsStateWithLifecycle()
+    val speechEngine by viewModel.speechEngine.collectAsStateWithLifecycle()
     val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
     val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
 
@@ -156,6 +157,44 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
+        // Banner if kiosk is active but device has not set this app as default home launcher
+        if (isActivated && !isDefaultHome && activePaymentAlert == null) {
+            androidx.compose.material3.Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .align(Alignment.TopCenter)
+                    .clickable { viewModel.promptSetDefaultLauncher() },
+                shape = RoundedCornerShape(12.dp),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = com.example.ui.theme.AmberGold),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = com.example.ui.theme.CockpitBlack)
+                        Text(
+                            text = "Kiosk Active: Tap to set as Default Home Launcher (Convert Home Button)",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = com.example.ui.theme.CockpitBlack
+                        )
+                    }
+                    Text(
+                        text = "SET NOW",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        color = com.example.ui.theme.CockpitBlack
+                    )
+                }
+            }
+        }
+
         // Snackbar Host for status notifications
         SnackbarHost(
             hostState = snackbarHostState,
@@ -209,6 +248,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 currentTheme = hudTheme,
                 selectedVoiceGender = voiceGender,
                 selectedTone = soundboxTone,
+                selectedSpeechEngine = speechEngine,
+                isDefaultHome = isDefaultHome,
                 onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },
                 onToggleAppBlacklisted = { pkg, blacklisted -> viewModel.toggleAppBlacklisted(pkg, blacklisted) },
@@ -218,8 +259,10 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 onUpdateCurrency = { curr -> viewModel.updateCurrency(curr) },
                 onVoiceGenderChange = { viewModel.setVoiceGender(it) },
                 onSoundboxToneChange = { viewModel.setSoundboxTone(it) },
+                onSpeechEngineChange = { viewModel.setSpeechEngine(it) },
                 onPreviewTone = { viewModel.previewTone(it) },
                 onPreviewVoice = { viewModel.previewVoice(it) },
+                onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher() },
                 onTestAnnouncement = { amt -> viewModel.announcePayment(amt) },
                 onRequestExit = {
                     viewModel.closeAdminSettings()

@@ -51,3 +51,32 @@ enum class SoundboxTone(
         }
     }
 }
+
+enum class SpeechEngine(
+    val id: String,
+    val displayName: String,
+    val subtitle: String
+) {
+    NATURAL_CLOUD(
+        id = "NATURAL_CLOUD",
+        displayName = "Google Natural Soundbox API",
+        subtitle = "Ultra-crisp human studio speech (Natural neural voice with automatic offline fallback)"
+    ),
+    GOOGLE_SPEECH_SERVICES(
+        id = "GOOGLE_SPEECH_SERVICES",
+        displayName = "Google Speech Services (On-Device)",
+        subtitle = "Explicit high-quality Google TTS engine (com.google.android.tts)"
+    ),
+    SYSTEM_TTS(
+        id = "SYSTEM_TTS",
+        displayName = "System Default Engine",
+        subtitle = "Standard device text-to-speech engine"
+    );
+
+    companion object {
+        fun fromId(id: String): SpeechEngine {
+            return entries.find { it.id.equals(id, ignoreCase = true) } ?: NATURAL_CLOUD
+        }
+    }
+}
+

@@ -219,5 +219,20 @@ class ExampleRobolectricTest {
     prefs.soundboxTone = phonepe.id
     assertEquals("FEMALE", prefs.voiceGender)
     assertEquals("PHONEPE_DING", prefs.soundboxTone)
+
+    // Verify SpeechEngine entries
+    assertEquals(3, com.example.model.SpeechEngine.entries.size)
+    val naturalCloud = com.example.model.SpeechEngine.NATURAL_CLOUD
+    val googleServices = com.example.model.SpeechEngine.GOOGLE_SPEECH_SERVICES
+    val systemTts = com.example.model.SpeechEngine.SYSTEM_TTS
+
+    assertEquals("NATURAL_CLOUD", prefs.speechEngine)
+    assertEquals(naturalCloud, com.example.model.SpeechEngine.fromId("NATURAL_CLOUD"))
+    assertEquals(googleServices, com.example.model.SpeechEngine.fromId("GOOGLE_SPEECH_SERVICES"))
+    assertEquals(systemTts, com.example.model.SpeechEngine.fromId("SYSTEM_TTS"))
+    assertEquals(naturalCloud, com.example.model.SpeechEngine.fromId("INVALID"))
+
+    prefs.speechEngine = googleServices.id
+    assertEquals("GOOGLE_SPEECH_SERVICES", prefs.speechEngine)
   }
 }

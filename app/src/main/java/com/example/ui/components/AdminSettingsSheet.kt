@@ -81,6 +81,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.model.AppItem
 import com.example.model.PaymentRecord
 import com.example.model.SoundboxTone
+import com.example.model.SpeechEngine
 import com.example.model.VoiceGender
 import com.example.ui.theme.AmberGold
 import com.example.ui.theme.CockpitBlack
@@ -111,6 +112,8 @@ fun AdminSettingsSheet(
     currentTheme: AutomotiveBrandTheme,
     selectedVoiceGender: VoiceGender = VoiceGender.MALE,
     selectedTone: SoundboxTone = SoundboxTone.PAYTM_TRIAD,
+    selectedSpeechEngine: SpeechEngine = SpeechEngine.NATURAL_CLOUD,
+    isDefaultHome: Boolean = false,
     onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onToggleAppBlacklisted: (String, Boolean) -> Unit = { _, _ -> },
@@ -120,8 +123,10 @@ fun AdminSettingsSheet(
     onUpdateCurrency: (String) -> Unit,
     onVoiceGenderChange: (VoiceGender) -> Unit = {},
     onSoundboxToneChange: (SoundboxTone) -> Unit = {},
+    onSpeechEngineChange: (SpeechEngine) -> Unit = {},
     onPreviewTone: (SoundboxTone) -> Unit = {},
     onPreviewVoice: (VoiceGender) -> Unit = {},
+    onPromptSetDefaultLauncher: () -> Unit = {},
     onTestAnnouncement: (Double) -> Unit,
     onRequestExit: () -> Unit,
     onRequestUninstall: () -> Unit,
@@ -236,6 +241,8 @@ fun AdminSettingsSheet(
                         )
                         3 -> SecurityAndExitTab(
                             currentSecondaryPhone = currentSecondaryPhone,
+                            isDefaultHome = isDefaultHome,
+                            onPromptSetDefaultLauncher = onPromptSetDefaultLauncher,
                             onUpdatePin = onUpdatePin,
                             onUpdateSecondaryPhone = onUpdateSecondaryPhone,
                             onRequestExit = onRequestExit,
@@ -245,10 +252,12 @@ fun AdminSettingsSheet(
                             currency = currency,
                             selectedVoiceGender = selectedVoiceGender,
                             selectedTone = selectedTone,
+                            selectedSpeechEngine = selectedSpeechEngine,
                             paymentHistory = paymentHistory,
                             onUpdateCurrency = onUpdateCurrency,
                             onVoiceGenderChange = onVoiceGenderChange,
                             onSoundboxToneChange = onSoundboxToneChange,
+                            onSpeechEngineChange = onSpeechEngineChange,
                             onPreviewTone = onPreviewTone,
                             onPreviewVoice = onPreviewVoice,
                             onTestAnnouncement = onTestAnnouncement
@@ -666,6 +675,8 @@ fun PowerSettingsTab(
 @Composable
 fun SecurityAndExitTab(
     currentSecondaryPhone: String,
+    isDefaultHome: Boolean = false,
+    onPromptSetDefaultLauncher: () -> Unit = {},
     onUpdatePin: (String) -> Boolean,
     onUpdateSecondaryPhone: (String) -> Unit,
     onRequestExit: () -> Unit,
@@ -682,10 +693,66 @@ fun SecurityAndExitTab(
     ) {
         item {
             Text(
-                text = "Kiosk Security & Passwords",
+                text = "Kiosk Security & Launcher Control",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
+        }
+
+        // Default Home Launcher Configuration Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isDefaultHome) EmeraldGreen.copy(alpha = 0.6f) else AmberGold
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Apps,
+                            contentDescription = null,
+                            tint = if (isDefaultHome) EmeraldGreen else AmberGold
+                        )
+                        Text(
+                            text = "Default Home Launcher",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = if (isDefaultHome) {
+                            "✅ Kiosk is configured as the active default Home Launcher. Samsung One UI home button is permanently locked to this app."
+                        } else {
+                            "⚠️ Kiosk is NOT yet set as the default launcher! When you press the device home button, it exits to Samsung Home. Tap below to set Kiosk as Default Home."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isDefaultHome) EmeraldGreen else AmberGold
+                    )
+
+                    Button(
+                        onClick = onPromptSetDefaultLauncher,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isDefaultHome) CockpitSurface else AmberGold,
+                            contentColor = if (isDefaultHome) HudCyan else CockpitBlack
+                        )
+                    ) {
+                        Text(
+                            text = if (isDefaultHome) "Re-verify Default Home Role" else "Set as Default Home Launcher Now",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
 
         // Change 8-Digit PIN Card
@@ -874,10 +941,12 @@ fun SoundboxSettingsTab(
     currency: String,
     selectedVoiceGender: VoiceGender,
     selectedTone: SoundboxTone,
+    selectedSpeechEngine: SpeechEngine = SpeechEngine.NATURAL_CLOUD,
     paymentHistory: List<PaymentRecord>,
     onUpdateCurrency: (String) -> Unit,
     onVoiceGenderChange: (VoiceGender) -> Unit,
     onSoundboxToneChange: (SoundboxTone) -> Unit,
+    onSpeechEngineChange: (SpeechEngine) -> Unit = {},
     onPreviewTone: (SoundboxTone) -> Unit,
     onPreviewVoice: (VoiceGender) -> Unit,
     onTestAnnouncement: (Double) -> Unit
@@ -894,6 +963,85 @@ fun SoundboxSettingsTab(
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
+        }
+
+        // 0. Speech Engine Selection Card (Google Natural Cloud vs Local)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, HudCyan.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Campaign,
+                            contentDescription = null,
+                            tint = HudCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Speech Engine (Voice Quality)",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = "Switch between high-definition studio speech API and local device synthesizers.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SpeechEngine.entries.forEach { engine ->
+                            val isSelected = engine == selectedSpeechEngine
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isSelected) HudCyan.copy(alpha = 0.15f) else CockpitSurface)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) HudCyan else CockpitBorder,
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .clickable { onSpeechEngineChange(engine) }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = null,
+                                    tint = if (isSelected) HudCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+
+                                Column {
+                                    Text(
+                                        text = engine.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isSelected) HudCyan else Color.White
+                                    )
+                                    Text(
+                                        text = engine.subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 1. Voice Gender Selection (Male / Female)
