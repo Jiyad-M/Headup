@@ -40,13 +40,30 @@ import java.util.UUID
 import kotlin.math.exp
 import kotlin.math.sin
 
-class PaymentSoundboxManager(
+class PaymentSoundboxManager private constructor(
     private val context: Context,
     private val preferences: KioskPreferences
 ) : TextToSpeech.OnInitListener {
 
+    companion object {
+        private const val TAG = "SoundboxManager"
+
+        @Volatile
+        private var INSTANCE: PaymentSoundboxManager? = null
+
+        fun getInstance(context: Context, preferences: KioskPreferences? = null): PaymentSoundboxManager {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: PaymentSoundboxManager(
+                    context.applicationContext,
+                    preferences ?: KioskPreferences(context.applicationContext)
+                ).also { INSTANCE = it }
+            }
+        }
+    }
+
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var pendingSpeechText: Pair<String, VoiceGender>? = null
     private var activeMediaPlayer: MediaPlayer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -81,7 +98,7 @@ class PaymentSoundboxManager(
                 }
             }
         } catch (e: Exception) {
-            Log.e("Soundbox", "Error initializing TTS with engine $engine", e)
+            Log.e(TAG, "Error initializing TTS with engine $engine", e)
             try {
                 tts = TextToSpeech(context.applicationContext, this)
             } catch (_: Exception) {}
@@ -92,7 +109,7 @@ class PaymentSoundboxManager(
         if (status == TextToSpeech.SUCCESS) {
             val result = tts?.setLanguage(Locale("en", "IN"))
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale.getDefault())
+                tts?.setLanguage(Locale.ENGLISH)
             }
             applyConfiguredVoice()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -110,12 +127,17 @@ class PaymentSoundboxManager(
                 }
             })
             isTtsReady = true
+
+            // If an announcement was queued while TTS was initializing, speak it now
+            pendingSpeechText?.let { (text, gender) ->
+                pendingSpeechText = null
+                speakWithLocalTts(text, gender, null)
+            }
+        } else {
+            Log.e(TAG, "TTS Initialization failed with status $status")
         }
     }
 
-    /**
-     * Applies voice configuration based on user preference (Male vs Female).
-     */
     fun applyConfiguredVoice() {
         val gender = try {
             VoiceGender.valueOf(preferences.voiceGender)
@@ -162,11 +184,11 @@ class PaymentSoundboxManager(
 
                 if (selectedVoice != null) {
                     tts?.voice = selectedVoice
-                    Log.d("Soundbox", "Selected ${gender.name} voice: ${selectedVoice.name}")
+                    Log.d(TAG, "Selected ${gender.name} voice: ${selectedVoice.name}")
                 }
             }
         } catch (e: Exception) {
-            Log.w("Soundbox", "Error configuring voice for $gender", e)
+            Log.w(TAG, "Error configuring voice for $gender", e)
         }
 
         if (gender == VoiceGender.MALE) {
@@ -178,10 +200,6 @@ class PaymentSoundboxManager(
         }
     }
 
-    /**
-     * Announces received payment with the selected chime tone followed by the selected voice API:
-     * e.g. [Selected Tone] -> "110 rupees received on Paytm"
-     */
     fun announcePayment(
         amount: Double,
         currencySymbol: String = preferences.currency,
@@ -202,6 +220,8 @@ class PaymentSoundboxManager(
                 appName.contains("paytm", ignoreCase = true) -> " on Paytm"
                 appName.contains("phonepe", ignoreCase = true) -> " on PhonePe"
                 appName.contains("gpay", ignoreCase = true) || appName.contains("google", ignoreCase = true) -> " on Google Pay"
+                appName.contains("bhim", ignoreCase = true) -> " on BHIM UPI"
+                appName.contains("bharatpe", ignoreCase = true) -> " on BharatPe"
                 else -> ""
             }
 
@@ -221,14 +241,14 @@ class PaymentSoundboxManager(
             _activePaymentAlert.value = record
             onComplete?.invoke(record)
 
-            // 1. Play Configured Chime Tone
+            // 1. Play Configured Chime Tone with full volume AudioTrack
             val tone = SoundboxTone.fromId(preferences.soundboxTone)
             playTone(tone)
 
             // Pause between chime and voice
             delay(520)
 
-            // 2. Speak amount with selected Speech API (Cloud Natural Voice or On-Device TTS)
+            // 2. Speak amount with selected Speech API
             val speechText = "$formattedAmount $currencyWord received$appSuffix"
             val gender = try {
                 VoiceGender.valueOf(preferences.voiceGender)
@@ -253,11 +273,6 @@ class PaymentSoundboxManager(
         }
     }
 
-    /**
-     * Speaks text using the chosen speech engine:
-     * - NATURAL_CLOUD: Google Natural High-Definition Studio Audio via stream & MediaPlayer
-     * - GOOGLE_SPEECH_SERVICES / SYSTEM_TTS: On-device TextToSpeech with configured gender
-     */
     fun speakWithEngine(
         text: String,
         gender: VoiceGender,
@@ -268,7 +283,7 @@ class PaymentSoundboxManager(
             coroutineScope.launch {
                 val success = playNaturalCloudVoice(text, gender, onDone)
                 if (!success) {
-                    Log.w("Soundbox", "Natural Cloud Speech failed, falling back to on-device TTS")
+                    Log.w(TAG, "Natural Cloud Speech returned false, speaking via on-device TTS")
                     speakWithLocalTts(text, gender, onDone)
                 }
             }
@@ -288,13 +303,13 @@ class PaymentSoundboxManager(
 
             if (!cacheFile.exists() || cacheFile.length() < 100) {
                 val encodedText = URLEncoder.encode(text, "UTF-8")
-                val langParam = "en-IN" // Authentic Indian soundbox accent
+                val langParam = "en-IN"
                 val ttsUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=$langParam&q=$encodedText"
 
                 val connection = URL(ttsUrl).openConnection() as HttpURLConnection
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8)")
-                connection.connectTimeout = 4000
-                connection.readTimeout = 5000
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0")
+                connection.connectTimeout = 2500
+                connection.readTimeout = 3000
                 connection.connect()
 
                 if (connection.responseCode == HttpURLConnection.HTTP_OK) {
@@ -323,27 +338,26 @@ class PaymentSoundboxManager(
 
                 mp.setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
                 mp.setDataSource(cacheFile.absolutePath)
                 mp.prepare()
 
-                // Apply pitch adjustments for Male vs Female studio voice
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     try {
                         val params = PlaybackParams()
                         if (gender == VoiceGender.MALE) {
-                            params.pitch = 0.84f // Deep authoritative merchant resonance
+                            params.pitch = 0.84f
                             params.speed = 0.94f
                         } else {
-                            params.pitch = 1.05f // Crisp melodic feminine clarity
+                            params.pitch = 1.05f
                             params.speed = 1.00f
                         }
                         mp.playbackParams = params
                     } catch (e: Exception) {
-                        Log.w("Soundbox", "Error setting playback params", e)
+                        Log.w(TAG, "Error setting playback params", e)
                     }
                 }
 
@@ -364,7 +378,7 @@ class PaymentSoundboxManager(
             }
             true
         } catch (e: Exception) {
-            Log.e("Soundbox", "Error playing Natural Cloud voice", e)
+            Log.e(TAG, "Error playing Natural Cloud voice", e)
             false
         }
     }
@@ -377,15 +391,17 @@ class PaymentSoundboxManager(
         configureVoice(gender)
         if (isTtsReady && tts != null) {
             val utteranceId = "SPEECH_${System.currentTimeMillis()}"
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+            val params = android.os.Bundle()
+            params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+            params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
         } else {
-            mainHandler.postDelayed({ onDone?.invoke() }, 2000)
+            // Queue speech until TTS finishes initializing
+            pendingSpeechText = Pair(text, gender)
+            mainHandler.postDelayed({ onDone?.invoke() }, 2200)
         }
     }
 
-    /**
-     * Previews/speaks a short voice test sample for the selected gender using active speech engine.
-     */
     fun testVoicePreview(gender: VoiceGender) {
         val sampleText = if (gender == VoiceGender.MALE) {
             "Male voice active. 150 rupees received on Paytm."
@@ -400,9 +416,6 @@ class PaymentSoundboxManager(
         _activePaymentAlert.value = null
     }
 
-    /**
-     * Plays a specific Soundbox tone using synthesized PCM sine waves with exponential decay.
-     */
     fun playTone(tone: SoundboxTone) {
         Thread {
             try {
@@ -422,7 +435,7 @@ class PaymentSoundboxManager(
                         Pair(1046.50, 0.26) // C6
                     )
                     SoundboxTone.CLASSIC_BEEP -> listOf(
-                        Pair(980.0, 0.22)   // Crisp 980Hz
+                        Pair(980.0, 0.22)
                     )
                     SoundboxTone.CRYSTAL_HARP -> listOf(
                         Pair(523.25, 0.08), // C5
@@ -459,8 +472,8 @@ class PaymentSoundboxManager(
                 val audioTrack = AudioTrack.Builder()
                     .setAudioAttributes(
                         AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                             .build()
                     )
                     .setAudioFormat(
@@ -481,9 +494,9 @@ class PaymentSoundboxManager(
                 audioTrack.stop()
                 audioTrack.release()
             } catch (e: Exception) {
-                Log.w("Soundbox", "AudioTrack tone playback failed, falling back to tone gen", e)
+                Log.w(TAG, "AudioTrack tone playback failed, falling back to tone gen", e)
                 try {
-                    val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                    val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
                     toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 300)
                     mainHandler.postDelayed({ toneGen.release() }, 400)
                 } catch (_: Exception) {}
@@ -521,5 +534,6 @@ class PaymentSoundboxManager(
             tts?.shutdown()
             tts = null
         } catch (_: Exception) {}
+        INSTANCE = null
     }
 }

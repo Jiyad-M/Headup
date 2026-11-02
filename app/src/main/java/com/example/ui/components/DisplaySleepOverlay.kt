@@ -50,9 +50,9 @@ import com.example.ui.theme.TataPunchJade
 fun DisplaySleepOverlay(
     isCompletelyOff: Boolean,
     countdownSec: Int?,
-    onSimulatePlugIn: () -> Unit
+    onWakeDisplay: () -> Unit = {}
 ) {
-    // 1. 3-Second Countdown Toast / Alert when unplugged
+    // 1. 3-Second Countdown Alert when power unplugged
     AnimatedVisibility(
         visible = countdownSec != null && countdownSec > 0 && !isCompletelyOff,
         enter = fadeIn(),
@@ -125,26 +125,26 @@ fun DisplaySleepOverlay(
                     // Touch does not wake display as requested ("otherwide cant works display")
                     detectTapGestures(
                         onLongPress = {
-                            // Secret dev/test bypass: long press 4 seconds wakes if needed
-                            onSimulatePlugIn()
+                            // Tap and hold emergency display wake
+                            onWakeDisplay()
                         }
                     )
                 }
                 .testTag("display_blackout_overlay"),
             contentAlignment = Alignment.BottomCenter
         ) {
-            // Invisible blackout layer, with faint subtle watermark only visible on extreme inspection
+            // Blackout layer with subtle power status label
             Text(
-                text = "⚡ Plug in power to turn display on",
+                text = "⚡ Real-time Power Guard: Plug in charger to turn display back on",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                color = Color.White.copy(alpha = 0.08f),
+                color = Color.White.copy(alpha = 0.15f),
                 modifier = Modifier
                     .padding(bottom = 20.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
-                        onSimulatePlugIn()
+                        onWakeDisplay()
                     }
             )
         }

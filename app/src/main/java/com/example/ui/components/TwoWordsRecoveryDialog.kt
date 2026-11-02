@@ -299,7 +299,7 @@ fun TwoWordsRecoveryDialog(
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Icon(imageVector = Icons.Default.Sms, contentDescription = null, tint = HudCyan, modifier = Modifier.size(16.dp))
-                                Text("Test / Simulate Incoming SMS", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = HudCyan)
+                                Text("Manual Verification / SMS Entry", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = HudCyan)
                             }
 
                             OutlinedTextField(

@@ -191,20 +191,6 @@ class PowerMonitor(
         applySystemScreenTimeout(600000) // 10 minutes when plugged in
     }
 
-    /**
-     * Emergency test simulator (for emulator or dev without power cable)
-     */
-    fun togglePowerSimulation() {
-        val currentPlugged = _powerState.value.isPlugged
-        if (currentPlugged) {
-            _powerState.value = _powerState.value.copy(isPlugged = false, isCharging = false, plugType = "Battery (Simulated)")
-            handlePowerDisconnected()
-        } else {
-            _powerState.value = _powerState.value.copy(isPlugged = true, isCharging = true, plugType = "AC Power (Simulated)")
-            handlePowerConnected()
-        }
-    }
-
     private fun wakeDevice() {
         try {
             val powerManager = activity.getSystemService(Context.POWER_SERVICE) as? PowerManager

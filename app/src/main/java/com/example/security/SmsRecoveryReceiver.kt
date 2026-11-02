@@ -7,11 +7,13 @@ import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.util.Log
 import com.example.data.KioskPreferences
+import com.example.soundbox.PaymentNotificationListenerService
+import com.example.soundbox.PaymentSoundboxManager
 
 class SmsRecoveryReceiver : BroadcastReceiver() {
 
     companion object {
-        private const val TAG = "SmsRecoveryReceiver"
+        private const val TAG = "SmsReceiver"
         var onSmsRecoveryVerified: ((sender: String, message: String) -> Unit)? = null
 
         /**
@@ -39,27 +41,41 @@ class SmsRecoveryReceiver : BroadcastReceiver() {
             val word2 = prefs.recoveryWord2.trim().uppercase()
             val altPhone = prefs.altPhone.trim()
 
-            if (word1.isEmpty() || word2.isEmpty()) return
-
             for (sms in messages) {
                 val sender = sms.displayOriginatingAddress ?: ""
-                val body = sms.displayMessageBody?.uppercase() ?: ""
+                val body = sms.displayMessageBody ?: ""
+                val upperBody = body.uppercase()
 
                 Log.d(TAG, "Incoming SMS from [$sender]: $body")
 
-                val isFromAltPhone = matchesPhoneNumber(sender, altPhone)
-                val containsBothWords = body.contains(word1) && body.contains(word2)
+                // 1. Check for Kiosk 2-word emergency recovery
+                if (word1.isNotEmpty() && word2.isNotEmpty()) {
+                    val isFromAltPhone = matchesPhoneNumber(sender, altPhone)
+                    val containsBothWords = upperBody.contains(word1) && upperBody.contains(word2)
 
-                if (isFromAltPhone && containsBothWords) {
-                    Log.i(TAG, "Valid recovery SMS received from alt phone with words [$word1, $word2]!")
-                    
-                    // Mark verified and start 3-hour timelock countdown for password change
-                    val threeHoursLater = System.currentTimeMillis() + (3 * 3600 * 1000L)
-                    prefs.isRecoveryVerified = true
-                    prefs.passwordResetUnlockTime = threeHoursLater
+                    if (isFromAltPhone && containsBothWords) {
+                        Log.i(TAG, "Valid recovery SMS received from alt phone with words [$word1, $word2]!")
+                        val threeHoursLater = System.currentTimeMillis() + (3 * 3600 * 1000L)
+                        prefs.isRecoveryVerified = true
+                        prefs.passwordResetUnlockTime = threeHoursLater
+                        onSmsRecoveryVerified?.invoke(sender, body)
+                        continue
+                    }
+                }
 
-                    onSmsRecoveryVerified?.invoke(sender, body)
-                    break
+                // 2. Check for Bank / UPI Credit SMS payment announcement
+                val isPaymentSms = upperBody.contains("CREDITED") ||
+                        upperBody.contains("RECEIVED") ||
+                        upperBody.contains("PAID YOU") ||
+                        upperBody.contains("UPI REF")
+                if (isPaymentSms) {
+                    val amount = PaymentNotificationListenerService.parsePaymentAmount(body)
+                    if (amount != null && amount > 0.0) {
+                        Log.i(TAG, "Extracted payment amount: ₹$amount from SMS: $sender")
+                        val soundboxManager = PaymentSoundboxManager.getInstance(context)
+                        soundboxManager.announcePayment(amount, "₹", "UPI SMS")
+                        PaymentNotificationListenerService.onPaymentReceivedListener?.invoke(amount, body)
+                    }
                 }
             }
         }

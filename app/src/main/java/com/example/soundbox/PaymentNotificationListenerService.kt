@@ -1,9 +1,6 @@
 package com.example.soundbox
 
 import android.app.Notification
-import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -26,32 +23,48 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             "com.bharatpe.app",                      // BharatPe
             "com.cred.club",                          // CRED
             "com.sbi.upi",                            // Yono SBI
-            "com.whatsapp"                            // WhatsApp Pay
+            "com.whatsapp",                           // WhatsApp Pay
+            "com.fampay.in",                          // FamPay
+            "com.axis.mobile",                        // Axis Mobile
+            "com.hdfcbank.payzapp",                   // HDFC PayZapp
+            "com.icicibank.pockets"                   // ICICI Pockets
         )
 
         /**
          * Extracts amount from notification text.
          * Matches:
          * "SURANYA G paid you ₹110.00" -> 110.0
-         * "Received ₹182.00 from..." -> 182.0
+         * "SHIJIMOL NELLENGARA paid you ₹182.00 Aysha" -> 182.0
          * "TANAY SARKAR paid you ₹68.00" -> 68.0
-         * "₹500 received" -> 500.0
+         * "Received ₹500.00 on Paytm" -> 500.0
+         * "A/C credited with Rs 150.00 by UPI" -> 150.0
          */
         fun parsePaymentAmount(text: String): Double? {
-            // Pattern for ₹ or Rs. or INR followed by number
+            // Pattern 1: ₹ or Rs. or INR followed by number (e.g. ₹110.00, Rs 500, INR 1,200)
             val regex = Pattern.compile("(?:[₹]|Rs\\.?|INR)\\s*([0-9]+(?:[,.][0-9]{1,2})?)", Pattern.CASE_INSENSITIVE)
             val matcher = regex.matcher(text)
             if (matcher.find()) {
                 val numStr = matcher.group(1)?.replace(",", "")
-                return numStr?.toDoubleOrNull()
+                val amt = numStr?.toDoubleOrNull()
+                if (amt != null && amt > 0.0) return amt
             }
 
-            // Pattern for "paid you 110" or "received 110"
-            val fallbackRegex = Pattern.compile("(?:paid you|received|credited with)\\s*([0-9]+(?:[,.][0-9]{1,2})?)", Pattern.CASE_INSENSITIVE)
+            // Pattern 2: "paid you 110" or "received 110" or "credited with 110"
+            val fallbackRegex = Pattern.compile("(?:paid you|received|credited with|credited by|payment of)\\s*(?:[₹]|Rs\\.?|INR)?\\s*([0-9]+(?:[,.][0-9]{1,2})?)", Pattern.CASE_INSENSITIVE)
             val fallbackMatcher = fallbackRegex.matcher(text)
             if (fallbackMatcher.find()) {
                 val numStr = fallbackMatcher.group(1)?.replace(",", "")
-                return numStr?.toDoubleOrNull()
+                val amt = numStr?.toDoubleOrNull()
+                if (amt != null && amt > 0.0) return amt
+            }
+
+            // Pattern 3: Number followed by rupees / INR (e.g. "150 rupees received")
+            val postfixRegex = Pattern.compile("([0-9]+(?:[,.][0-9]{1,2})?)\\s*(?:rupees|rs|inr)", Pattern.CASE_INSENSITIVE)
+            val postfixMatcher = postfixRegex.matcher(text)
+            if (postfixMatcher.find()) {
+                val numStr = postfixMatcher.group(1)?.replace(",", "")
+                val amt = numStr?.toDoubleOrNull()
+                if (amt != null && amt > 0.0) return amt
             }
 
             return null
@@ -61,13 +74,13 @@ class PaymentNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
-        Log.d(TAG, "Notification Listener connected successfully.")
+        Log.i(TAG, "Notification Listener connected successfully.")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         instance = null
-        Log.d(TAG, "Notification Listener disconnected.")
+        Log.w(TAG, "Notification Listener disconnected.")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -85,24 +98,39 @@ class PaymentNotificationListenerService : NotificationListenerService() {
 
             Log.d(TAG, "Notification received from [$pkg]: $fullContent")
 
+            // Determine app name for announcement (e.g. Google Pay, PhonePe, Paytm)
+            val appName = when {
+                pkg.contains("paisa", ignoreCase = true) || fullContent.contains("gpay", ignoreCase = true) || fullContent.contains("google", ignoreCase = true) -> "Google Pay"
+                pkg.contains("phonepe", ignoreCase = true) || fullContent.contains("phonepe", ignoreCase = true) -> "PhonePe"
+                pkg.contains("paytm", ignoreCase = true) || fullContent.contains("paytm", ignoreCase = true) -> "Paytm"
+                pkg.contains("bhim", ignoreCase = true) || fullContent.contains("bhim", ignoreCase = true) -> "BHIM UPI"
+                pkg.contains("bharatpe", ignoreCase = true) -> "BharatPe"
+                else -> "UPI Payment"
+            }
+
             // Check if notification contains payment indicators
             val isPaymentApp = PAYMENT_PACKAGES.contains(pkg)
             val hasPaymentKeywords = fullContent.contains("paid you", ignoreCase = true) ||
                     fullContent.contains("received", ignoreCase = true) ||
                     fullContent.contains("credited", ignoreCase = true) ||
-                    fullContent.contains("payment from", ignoreCase = true)
+                    fullContent.contains("payment from", ignoreCase = true) ||
+                    fullContent.contains("upi ref", ignoreCase = true) ||
+                    fullContent.contains("₹")
 
             if (isPaymentApp || hasPaymentKeywords) {
                 val amount = parsePaymentAmount(fullContent)
                 if (amount != null && amount > 0) {
-                    Log.i(TAG, "Extracted payment amount: ₹$amount from notification!")
-                    
-                    // Announce payment without customer name: chime beep first, then speech
-                    val prefs = KioskPreferences(applicationContext)
-                    val soundboxManager = PaymentSoundboxManager(applicationContext, prefs)
-                    soundboxManager.announcePayment(amount, "₹")
+                    Log.i(TAG, "Extracted payment amount: ₹$amount from $appName!")
 
-                    // Notify UI if listening
+                    // Call the shared SoundboxManager singleton so pre-warmed TTS announces immediately
+                    val soundboxManager = PaymentSoundboxManager.getInstance(applicationContext)
+                    soundboxManager.announcePayment(
+                        amount = amount,
+                        currencySymbol = "₹",
+                        appName = appName
+                    )
+
+                    // Notify UI listeners
                     onPaymentReceivedListener?.invoke(amount, fullContent)
                 }
             }

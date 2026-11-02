@@ -1,6 +1,8 @@
 package com.example.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +51,7 @@ import com.example.ui.components.AdminSettingsSheet
 import com.example.ui.components.AllowedAppsGrid
 import com.example.ui.components.AutomotiveHudCluster
 import com.example.ui.components.DisplaySleepOverlay
+import com.example.ui.components.KioskPermissionsBanner
 import com.example.ui.components.KioskTopBar
 import com.example.ui.components.PaymentSoundboxCard
 import com.example.ui.components.PinUnlockDialog
@@ -83,6 +86,9 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val speechEngine by viewModel.speechEngine.collectAsStateWithLifecycle()
     val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
     val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
+    val hasLocationPermission by viewModel.hasLocationPermission.collectAsStateWithLifecycle()
+    val hasSmsPermission by viewModel.hasSmsPermission.collectAsStateWithLifecycle()
+    val hasAllPermissions by viewModel.hasAllPermissions.collectAsStateWithLifecycle()
 
     val gpsSpeed by viewModel.gpsSpeed.collectAsStateWithLifecycle()
     val hasGpsFix by viewModel.hasGpsFix.collectAsStateWithLifecycle()
@@ -103,6 +109,18 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val blockedAppAttempt by viewModel.blockedAppAttempt.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        viewModel.refreshAllPermissions()
+    }
+
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.refreshAllPermissions()
+    }
 
     // Intercept back button in kiosk launcher so user cannot exit without 8-digit password
     BackHandler {
@@ -147,7 +165,14 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher() },
             onOpenSettings = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
             onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) },
-            onToggleGpsSimulation = { viewModel.toggleGpsSimulation() }
+            onRequestGpsPermission = {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
         )
 
         // Realistic GPay Soundbox Alert Overlay
@@ -157,42 +182,50 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
-        // Banner if kiosk is active but device has not set this app as default home launcher
-        if (isActivated && !isDefaultHome && activePaymentAlert == null) {
-            androidx.compose.material3.Card(
+        // Transparent Permissions & Setup Banner asking for required permissions (GPS, Soundbox notification, Default home, SMS)
+        if (isActivated && !hasAllPermissions && activePaymentAlert == null) {
+            KioskPermissionsBanner(
+                hasLocationPermission = hasLocationPermission,
+                isNotificationAccessGranted = isNotificationAccessGranted,
+                isDefaultHome = isDefaultHome,
+                hasSmsPermission = hasSmsPermission,
+                onRequestLocation = {
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                },
+                onRequestNotificationAccess = {
+                    viewModel.openNotificationAccessSettings()
+                },
+                onRequestDefaultLauncher = {
+                    viewModel.promptSetDefaultLauncher()
+                },
+                onRequestSms = {
+                    smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
+                },
+                onRequestAll = {
+                    if (!hasLocationPermission) {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                android.Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    } else if (!isNotificationAccessGranted) {
+                        viewModel.openNotificationAccessSettings()
+                    } else if (!isDefaultHome) {
+                        viewModel.promptSetDefaultLauncher()
+                    } else if (!hasSmsPermission) {
+                        smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
                     .align(Alignment.TopCenter)
-                    .clickable { viewModel.promptSetDefaultLauncher() },
-                shape = RoundedCornerShape(12.dp),
-                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = com.example.ui.theme.AmberGold),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = com.example.ui.theme.CockpitBlack)
-                        Text(
-                            text = "Kiosk Active: Tap to set as Default Home Launcher (Convert Home Button)",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                            color = com.example.ui.theme.CockpitBlack
-                        )
-                    }
-                    Text(
-                        text = "SET NOW",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
-                        color = com.example.ui.theme.CockpitBlack
-                    )
-                }
-            }
+            )
         }
 
         // Snackbar Host for status notifications
@@ -207,7 +240,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
         DisplaySleepOverlay(
             isCompletelyOff = isDisplayCompletelyOff,
             countdownSec = unplugCountdown,
-            onSimulatePlugIn = { viewModel.togglePowerSimulation() }
+            onWakeDisplay = { }
         )
 
         // 7. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)

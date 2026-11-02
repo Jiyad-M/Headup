@@ -46,7 +46,7 @@ class KioskViewModel(
     val preferences = KioskPreferences(application)
     val securityManager = KioskSecurityManager(application, preferences)
     val appManager = AppManager(application, preferences)
-    val soundboxManager = PaymentSoundboxManager(application, preferences)
+    val soundboxManager = PaymentSoundboxManager.getInstance(application, preferences)
     val powerMonitor = PowerMonitor(activity, preferences)
     val gpsSpeedometer = com.example.speed.GpsSpeedometerManager(application)
 
@@ -101,8 +101,17 @@ class KioskViewModel(
     private val _blockedAppAttempt = MutableStateFlow<String?>(null)
     val blockedAppAttempt: StateFlow<String?> = _blockedAppAttempt.asStateFlow()
 
+    private val _hasLocationPermission = MutableStateFlow(checkLocationPermissionGranted())
+    val hasLocationPermission: StateFlow<Boolean> = _hasLocationPermission.asStateFlow()
+
+    private val _hasSmsPermission = MutableStateFlow(checkSmsPermissionGranted())
+    val hasSmsPermission: StateFlow<Boolean> = _hasSmsPermission.asStateFlow()
+
     private val _isNotificationAccessGranted = MutableStateFlow(checkNotificationAccessGranted())
     val isNotificationAccessGranted: StateFlow<Boolean> = _isNotificationAccessGranted.asStateFlow()
+
+    private val _hasAllPermissions = MutableStateFlow(false)
+    val hasAllPermissions: StateFlow<Boolean> = _hasAllPermissions.asStateFlow()
 
     private val _hudTheme = MutableStateFlow(
         try {
@@ -197,9 +206,44 @@ class KioskViewModel(
         }
     }
 
+    fun checkLocationPermissionGranted(): Boolean {
+        val fine = androidx.core.content.ContextCompat.checkSelfPermission(
+            activity,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = androidx.core.content.ContextCompat.checkSelfPermission(
+            activity,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return fine || coarse
+    }
+
+    fun checkSmsPermissionGranted(): Boolean {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            activity,
+            android.Manifest.permission.RECEIVE_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun refreshDefaultHomeState() {
-        _isDefaultHome.value = checkIsDefaultHome()
-        _isNotificationAccessGranted.value = checkNotificationAccessGranted()
+        refreshAllPermissions()
+    }
+
+    fun refreshAllPermissions() {
+        val home = checkIsDefaultHome()
+        val notif = checkNotificationAccessGranted()
+        val loc = checkLocationPermissionGranted()
+        val sms = checkSmsPermissionGranted()
+
+        _isDefaultHome.value = home
+        _isNotificationAccessGranted.value = notif
+        _hasLocationPermission.value = loc
+        _hasSmsPermission.value = sms
+        _hasAllPermissions.value = home && notif && loc && sms
+
+        if (loc) {
+            gpsSpeedometer.startTracking()
+        }
     }
 
     /**
@@ -471,12 +515,8 @@ class KioskViewModel(
         preferences.currency = newCurrency
     }
 
-    fun togglePowerSimulation() {
-        powerMonitor.togglePowerSimulation()
-    }
-
-    fun toggleGpsSimulation() {
-        gpsSpeedometer.toggleSimulation()
+    fun restartGpsTracking() {
+        gpsSpeedometer.startTracking()
     }
 
     fun dismissPaymentAlert() {

@@ -6,7 +6,6 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
-import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +16,6 @@ import kotlin.math.roundToInt
 class GpsSpeedometerManager(private val context: Context) : LocationListener {
 
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val _speedKmH = MutableStateFlow(0)
     val speedKmH: StateFlow<Int> = _speedKmH.asStateFlow()
@@ -30,13 +28,13 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
 
     private var lastLocation: Location? = null
     private var isTracking = false
-    private var isSimulating = false
+    private var smoothedSpeedKmH = 0f
 
     @SuppressLint("MissingPermission")
     fun startTracking() {
         if (isTracking) return
         val lm = locationManager ?: run {
-            _gpsStatusText.value = "GPS Unavailable"
+            _gpsStatusText.value = "GPS Hardware Unavailable"
             return
         }
 
@@ -48,6 +46,7 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
             context,
             android.Manifest.permission.ACCESS_COARSE_LOCATION
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
         if (!hasFine && !hasCoarse) {
             _gpsStatusText.value = "GPS Permission Needed"
             return
@@ -62,16 +61,18 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
                 return
             }
 
+            // Real-time GPS provider (500ms intervals, 0m distance for live speedometer)
             if (isGpsEnabled) {
                 lm.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    500L, // 500ms for responsive speedometer
+                    500L,
                     0f,
                     this,
                     Looper.getMainLooper()
                 )
             }
 
+            // Network provider fallback
             if (isNetworkEnabled) {
                 lm.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
@@ -82,13 +83,13 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
                 )
             }
 
-            // Check last known location
+            // Check initial last known location
             val lastGps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
             lastGps?.let { onLocationChanged(it) }
 
             isTracking = true
-            _gpsStatusText.value = if (isGpsEnabled) "GPS Active" else "Network Location"
+            _gpsStatusText.value = if (isGpsEnabled) "GPS Searching..." else "Network Location"
         } catch (e: SecurityException) {
             _gpsStatusText.value = "GPS Permission Needed"
             Log.w("GpsSpeedometer", "Location permission not granted yet", e)
@@ -105,6 +106,7 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
         } catch (_: Exception) {}
         isTracking = false
         _hasGpsFix.value = false
+        _speedKmH.value = 0
     }
 
     override fun onLocationChanged(location: Location) {
@@ -112,22 +114,34 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
         _gpsStatusText.value = "GPS Locked"
 
         var speedMps = 0f
-        if (location.hasSpeed()) {
+        if (location.hasSpeed() && location.speed >= 0f) {
             speedMps = location.speed
         } else {
             val prev = lastLocation
             if (prev != null) {
                 val timeDeltaSec = (location.time - prev.time) / 1000.0
-                if (timeDeltaSec in 0.2..10.0) {
+                if (timeDeltaSec in 0.3..10.0) {
                     val distanceMeters = location.distanceTo(prev)
-                    speedMps = (distanceMeters / timeDeltaSec).toFloat()
+                    // Discard unrealistic GPS jumps > 250 km/h
+                    val computedSpeed = (distanceMeters / timeDeltaSec).toFloat()
+                    if (computedSpeed < 70f) { // ~250 km/h
+                        speedMps = computedSpeed
+                    }
                 }
             }
         }
         lastLocation = location
 
-        val kmh = (speedMps * 3.6f).roundToInt().coerceIn(0, 220)
-        _speedKmH.value = kmh
+        val rawKmh = (speedMps * 3.6f).coerceIn(0f, 220f)
+        
+        // Exponential smoothing for steady real-time needle movement without noise
+        smoothedSpeedKmH = if (rawKmh < 1.5f) {
+            0f // Dead-band filter for stationary vehicle
+        } else {
+            smoothedSpeedKmH * 0.4f + rawKmh * 0.6f
+        }
+
+        _speedKmH.value = smoothedSpeedKmH.roundToInt().coerceIn(0, 220)
     }
 
     @Deprecated("Deprecated in Java")
@@ -135,41 +149,14 @@ class GpsSpeedometerManager(private val context: Context) : LocationListener {
 
     override fun onProviderEnabled(provider: String) {
         _gpsStatusText.value = "$provider Enabled"
+        startTracking()
     }
 
     override fun onProviderDisabled(provider: String) {
         _gpsStatusText.value = "$provider Disabled"
         if (provider == LocationManager.GPS_PROVIDER) {
             _hasGpsFix.value = false
-        }
-    }
-
-    /**
-     * Simulation toggle for test drives when vehicle is stationary or indoors
-     */
-    fun toggleSimulation() {
-        isSimulating = !isSimulating
-        if (isSimulating) {
-            _hasGpsFix.value = true
-            _gpsStatusText.value = "GPS Drive Simulated"
-            simulateSpeedStep(0, 1)
-        } else {
             _speedKmH.value = 0
-            _gpsStatusText.value = "GPS Active"
         }
-    }
-
-    private fun simulateSpeedStep(current: Int, step: Int) {
-        if (!isSimulating) return
-        val next = (current + step).coerceIn(0, 120)
-        _speedKmH.value = next
-        val nextStep = when {
-            next >= 85 -> -2
-            next <= 10 -> 2
-            else -> step
-        }
-        mainHandler.postDelayed({
-            simulateSpeedStep(next, nextStep)
-        }, 120)
     }
 }
