@@ -247,47 +247,68 @@ class KioskViewModel(
     }
 
     /**
-     * Prompts the official Android dialog to set this app as Default Home
-     * replacing Samsung One UI permanently when Home button is tapped.
+     * Prompts to set this app as Default Home
+     * replacing Samsung One UI / default launcher when Home button is tapped.
      */
-    fun promptSetDefaultLauncher() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    fun promptSetDefaultLauncher(launcher: androidx.activity.result.ActivityResultLauncher<Intent>? = null) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
                 val roleManager = activity.getSystemService(RoleManager::class.java)
                 if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
                     if (!roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
                         val roleIntent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
-                        activity.startActivity(roleIntent)
-                        return
+                        if (launcher != null) {
+                            launcher.launch(roleIntent)
+                            return
+                        } else {
+                            try {
+                                activity.startActivity(roleIntent)
+                                return
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                android.util.Log.w("KioskViewModel", "RoleManager error", e)
             }
-
-            // Fallback 1: Home settings intent
-            try {
-                val homeSettingsIntent = Intent(Settings.ACTION_HOME_SETTINGS)
-                homeSettingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                activity.startActivity(homeSettingsIntent)
-                return
-            } catch (_: Exception) {}
-
-            // Fallback 2: Default apps settings
-            try {
-                val defaultAppsIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-                defaultAppsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                activity.startActivity(defaultAppsIntent)
-                return
-            } catch (_: Exception) {}
-
-            // Fallback 3: Intent chooser
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            activity.startActivity(Intent.createChooser(intent, "Set Kiosk as Default Home (Choose 'Always')"))
-        } catch (_: Exception) {
-            _statusMessage.value = "Open Device Settings -> Apps -> Choose default apps -> Home app -> Select Kiosk Launcher"
         }
+
+        // Direct Samsung One UI / Android settings
+        openHomeSettingsDirectly()
+    }
+
+    /**
+     * Opens system Default Apps or Home Settings directly
+     * (100% reliable on Samsung One UI, Xiaomi, Oppo, and generic Android)
+     */
+    fun openHomeSettingsDirectly() {
+        val intents = listOf(
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+            Intent(Settings.ACTION_HOME_SETTINGS),
+            Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addCategory(Intent.CATEGORY_DEFAULT)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            },
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:${activity.packageName}")
+            }
+        )
+
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(intent)
+                _statusMessage.value = "Tap 'Home app' and select 'Kiosk Launcher'"
+                return
+            } catch (_: Exception) {}
+        }
+
+        _statusMessage.value = "Open Phone Settings -> Apps -> Default apps -> Home app -> Select Kiosk Launcher"
+    }
+
+    fun wakeDisplay() {
+        powerMonitor.wakeDisplay()
     }
 
     fun checkNotificationAccessGranted(): Boolean {
@@ -548,9 +569,7 @@ class KioskViewModel(
     }
 
     fun enforceDefaultLauncherIfActive() {
-        if (preferences.isActivated && !checkIsDefaultHome()) {
-            promptSetDefaultLauncher()
-        }
+        refreshDefaultHomeState()
     }
 
     fun previewVoice(gender: VoiceGender) {

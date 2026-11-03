@@ -38,7 +38,6 @@ class MainActivity : ComponentActivity() {
         viewModel.refreshDefaultHomeState()
         viewModel.refreshApps()
         viewModel.loadPaymentHistory()
-        viewModel.enforceDefaultLauncherIfActive()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

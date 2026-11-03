@@ -198,7 +198,14 @@ private fun PermissionStatusRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(Color(0xFF031411))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .then(
+                if (!isGranted) {
+                    Modifier.clickable { onAction() }
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -211,7 +218,7 @@ private fun PermissionStatusRow(
                 imageVector = icon,
                 contentDescription = null,
                 tint = if (isGranted) EmeraldGreen else Color(0xFFFFB300),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
             Column {
                 Text(
@@ -236,7 +243,7 @@ private fun PermissionStatusRow(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = null,
                     tint = EmeraldGreen,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = "Active",
@@ -245,14 +252,16 @@ private fun PermissionStatusRow(
                 )
             }
         } else {
-            OutlinedButton(
+            Button(
                 onClick = onAction,
                 shape = RoundedCornerShape(8.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB300)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFB300)),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFB300),
+                    contentColor = CockpitBlack
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

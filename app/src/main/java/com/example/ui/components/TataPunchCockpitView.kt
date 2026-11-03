@@ -112,6 +112,7 @@ fun TataPunchCockpitView(
 ) {
     var currentTime by remember { mutableStateOf("09:20") }
     var currentDate by remember { mutableStateOf("Tue, 24 Feb") }
+    var currentAmPm by remember { mutableStateOf("AM/PM") }
     var currentHour by remember { mutableIntStateOf(9) }
     var currentMinute by remember { mutableIntStateOf(20) }
     var currentSecond by remember { mutableIntStateOf(0) }
@@ -125,10 +126,12 @@ fun TataPunchCockpitView(
     LaunchedEffect(Unit) {
         val timeFormat = SimpleDateFormat("hh:mm", Locale.getDefault())
         val dateFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
+        val amPmFormat = SimpleDateFormat("a", Locale.getDefault())
         while (true) {
             val now = Calendar.getInstance()
             currentTime = timeFormat.format(now.time)
             currentDate = dateFormat.format(now.time)
+            currentAmPm = amPmFormat.format(now.time).uppercase()
             currentHour = now.get(Calendar.HOUR)
             currentMinute = now.get(Calendar.MINUTE)
             currentSecond = now.get(Calendar.SECOND)
@@ -326,11 +329,12 @@ fun TataPunchCockpitView(
                                 .fillMaxHeight()
                         )
 
-                        // Right Panel: TIME/CLOCK (Authentic Analog Clock Dial from Uploaded Image)
-                        AnalogClockCockpitCard(
+                        // Right Panel: DIGITAL CLOCK (Matching photo 1: 09:20 AM/PM with illuminated hour ring)
+                        DigitalClockCockpitCard(
+                            timeText = currentTime,
+                            amPm = currentAmPm,
                             hour = currentHour,
                             minute = currentMinute,
-                            second = currentSecond,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -367,10 +371,11 @@ fun TataPunchCockpitView(
                                 .fillMaxHeight()
                         )
 
-                        AnalogClockCockpitCard(
+                        DigitalClockCockpitCard(
+                            timeText = currentTime,
+                            amPm = currentAmPm,
                             hour = currentHour,
                             minute = currentMinute,
-                            second = currentSecond,
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -751,13 +756,14 @@ fun AllowedAppsCockpitCard(
 }
 
 // -------------------------------------------------------------
-// PANEL 3: TIME/CLOCK CARD (Authentic Analog Clock Dial from Uploaded Image)
+// PANEL 3: DIGITAL CLOCK CARD (Matching Photo 1: 09:20 AM/PM with Illuminated Hour Ring)
 // -------------------------------------------------------------
 @Composable
-fun AnalogClockCockpitCard(
+fun DigitalClockCockpitCard(
+    timeText: String,
+    amPm: String,
     hour: Int,
     minute: Int,
-    second: Int,
     modifier: Modifier = Modifier
 ) {
     val cardGradient = Brush.verticalGradient(
@@ -782,9 +788,9 @@ fun AnalogClockCockpitCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header: TIME/CLOCK
+            // Header: DIGITAL CLOCK
             Text(
-                text = "TIME/CLOCK",
+                text = "DIGITAL CLOCK",
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp,
@@ -793,7 +799,7 @@ fun AnalogClockCockpitCard(
                 color = TataEvTextLight.copy(alpha = 0.9f)
             )
 
-            // Analog Clock Face (Exact design from uploaded image)
+            // Round Circular Gauge Ring with Digital Time Inside (Exact from photo 1)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -816,109 +822,70 @@ fun AnalogClockCockpitCard(
                         center = center
                     )
 
-                    // Outer bezel ring
+                    // Track background ring
                     drawCircle(
-                        color = Color(0xFF1B6B5C).copy(alpha = 0.9f),
+                        color = Color(0xFF0B342C),
                         radius = radius,
                         center = center,
-                        style = Stroke(width = 2.dp.toPx())
+                        style = Stroke(width = 6.dp.toPx())
                     )
 
-                    // 60 Tick Marks around circumference
-                    for (i in 0 until 60) {
-                        val isHourTick = (i % 5 == 0)
-                        val tickLen = if (isHourTick) 8.dp.toPx() else 4.dp.toPx()
-                        val tickWidth = if (isHourTick) 2.dp.toPx() else 1.dp.toPx()
-                        val tickColor = if (isHourTick) Color.White else Color(0xFF1B6B5C).copy(alpha = 0.7f)
-
-                        rotate(degrees = i * 6f, pivot = center) {
-                            drawLine(
-                                color = tickColor,
-                                start = Offset(center.x, center.y - radius + 3.dp.toPx()),
-                                end = Offset(center.x, center.y - radius + 3.dp.toPx() + tickLen),
-                                strokeWidth = tickWidth,
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
-
-                    // Hour Numerals: 12, 3, 6, 9
-                    val paint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.WHITE
-                        textSize = 15.sp.toPx()
-                        isAntiAlias = true
-                        typeface = android.graphics.Typeface.create(
-                            android.graphics.Typeface.SANS_SERIF,
-                            android.graphics.Typeface.BOLD
-                        )
-                        textAlign = android.graphics.Paint.Align.CENTER
-                    }
-
-                    val numeralOffset = radius * 0.72f
-                    // 12
-                    drawContext.canvas.nativeCanvas.drawText("12", center.x, center.y - numeralOffset + (paint.textSize / 3), paint)
-                    // 3
-                    drawContext.canvas.nativeCanvas.drawText("3", center.x + numeralOffset, center.y + (paint.textSize / 3), paint)
-                    // 6
-                    drawContext.canvas.nativeCanvas.drawText("6", center.x, center.y + numeralOffset + (paint.textSize / 3), paint)
-                    // 9
-                    drawContext.canvas.nativeCanvas.drawText("9", center.x - numeralOffset, center.y + (paint.textSize / 3), paint)
-
-                    // Calculate Angles
-                    val hourAngle = ((hour % 12) + (minute / 60f)) * 30f
-                    val minuteAngle = (minute + (second / 60f)) * 6f
-                    val secondAngle = second * 6f
-
-                    // Hour Hand
-                    rotate(degrees = hourAngle, pivot = center) {
-                        drawLine(
-                            color = Color.White.copy(alpha = 0.95f),
-                            start = center,
-                            end = Offset(center.x, center.y - (radius * 0.52f)),
-                            strokeWidth = 4.5.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-
-                    // Minute Hand
-                    rotate(degrees = minuteAngle, pivot = center) {
-                        drawLine(
-                            color = Color.White,
-                            start = center,
-                            end = Offset(center.x, center.y - (radius * 0.76f)),
-                            strokeWidth = 3.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-
-                    // Second Hand (Mint/Cyan Needle)
-                    rotate(degrees = secondAngle, pivot = center) {
-                        drawLine(
-                            color = TataPunchMint,
-                            start = Offset(center.x, center.y + (radius * 0.16f)), // Tail
-                            end = Offset(center.x, center.y - (radius * 0.86f)),   // Needle tip
-                            strokeWidth = 1.5.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-
-                    // Center Pivot Dot
+                    // Outer fine bezel
                     drawCircle(
-                        color = TataPunchMint,
-                        radius = 4.5.dp.toPx(),
-                        center = center
+                        color = Color(0xFF1B6B5C).copy(alpha = 0.6f),
+                        radius = radius + 3.dp.toPx(),
+                        center = center,
+                        style = Stroke(width = 1.dp.toPx())
                     )
-                    drawCircle(
-                        color = Color(0xFF041F1A),
-                        radius = 2.dp.toPx(),
-                        center = center
+
+                    // Active 12-hour progression arc (illuminated green/mint neon)
+                    val hour12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+                    val progressFraction = (hour12 % 12 + minute / 60f) / 12f
+                    val sweepAngle = progressFraction * 360f
+
+                    drawArc(
+                        brush = Brush.sweepGradient(
+                            colors = listOf(TataPunchJade, TataPunchMint, TataPunchJade),
+                            center = center
+                        ),
+                        startAngle = -90f,
+                        sweepAngle = sweepAngle.coerceAtLeast(20f),
+                        useCenter = false,
+                        style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+
+                // Digital Clock Digits (09:20 AM/PM)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.displayMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 2.sp,
+                            fontSize = 32.sp
+                        ),
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = amPm.ifEmpty { "AM/PM" },
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.5.sp,
+                            fontSize = 12.sp
+                        ),
+                        color = TataPunchMint.copy(alpha = 0.9f)
                     )
                 }
             }
 
             // Real-Time Clock Status
             Text(
-                text = "Real-time System Clock",
+                text = "12-Hour Active Digital Clock",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold

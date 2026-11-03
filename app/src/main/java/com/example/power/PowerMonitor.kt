@@ -71,7 +71,6 @@ class PowerMonitor(
                     }
 
                     val wasPlugged = _powerState.value.isPlugged
-                    val isFirstCheck = !hasPerformedInitialCheck
                     hasPerformedInitialCheck = true
 
                     _powerState.value = PowerState(
@@ -83,7 +82,8 @@ class PowerMonitor(
 
                     if (isPlugged) {
                         handlePowerConnected()
-                    } else if (isFirstCheck || (wasPlugged && !isPlugged)) {
+                    } else if (wasPlugged && !isPlugged) {
+                        // Only trigger when power is actively disconnected during a session
                         handlePowerDisconnected()
                     }
                 }
@@ -139,11 +139,28 @@ class PowerMonitor(
     }
 
     /**
+     * Manual or touch wake up from blackout
+     */
+    fun wakeDisplay() {
+        countdownJob?.cancel()
+        _unplugCountdown.value = null
+        _isDisplayCompletelyOff.value = false
+
+        activity.runOnUiThread {
+            val lp = activity.window.attributes
+            lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            activity.window.attributes = lp
+        }
+    }
+
+    /**
      * Power unplugged:
-     * "When unpluged screen timeout is 3 second"
-     * "unplugged completly light off after 3 second like power button press compltly off"
+     * Only triggers if sleepOnUnplugged preference is enabled.
      */
     fun handlePowerDisconnected() {
+        if (!preferences.sleepOnUnplugged) {
+            return
+        }
         countdownJob?.cancel()
         countdownJob = coroutineScope.launch {
             // Set Android system screen timeout to 3000ms (3 seconds) if permissible

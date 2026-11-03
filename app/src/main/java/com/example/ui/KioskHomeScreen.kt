@@ -122,6 +122,12 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
         viewModel.refreshAllPermissions()
     }
 
+    val homeRoleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.refreshDefaultHomeState()
+    }
+
     // Intercept back button in kiosk launcher so user cannot exit without 8-digit password
     BackHandler {
         if (isActivated) {
@@ -162,7 +168,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             hasGpsFix = hasGpsFix,
             gpsStatusText = gpsStatusText,
             onAppClick = { pkg -> viewModel.launchApp(pkg) },
-            onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher() },
+            onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher(homeRoleLauncher) },
             onOpenSettings = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
             onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) },
             onRequestGpsPermission = {
@@ -201,7 +207,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                     viewModel.openNotificationAccessSettings()
                 },
                 onRequestDefaultLauncher = {
-                    viewModel.promptSetDefaultLauncher()
+                    viewModel.promptSetDefaultLauncher(homeRoleLauncher)
                 },
                 onRequestSms = {
                     smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
@@ -217,7 +223,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                     } else if (!isNotificationAccessGranted) {
                         viewModel.openNotificationAccessSettings()
                     } else if (!isDefaultHome) {
-                        viewModel.promptSetDefaultLauncher()
+                        viewModel.promptSetDefaultLauncher(homeRoleLauncher)
                     } else if (!hasSmsPermission) {
                         smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
                     }
@@ -240,7 +246,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
         DisplaySleepOverlay(
             isCompletelyOff = isDisplayCompletelyOff,
             countdownSec = unplugCountdown,
-            onWakeDisplay = { }
+            onWakeDisplay = { viewModel.wakeDisplay() }
         )
 
         // 7. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)
