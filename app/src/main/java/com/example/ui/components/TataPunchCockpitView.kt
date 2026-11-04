@@ -112,6 +112,8 @@ fun TataPunchCockpitView(
     onOpenSettings: () -> Unit,
     onQuickChimeTest: (Int) -> Unit,
     onRequestGpsPermission: () -> Unit = {},
+    displayWakeTrigger: Long = 0L,
+    isLightMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var currentTime by remember { mutableStateOf("09:20") }
@@ -150,17 +152,24 @@ fun TataPunchCockpitView(
     fun triggerIgnitionSweep() {
         animationScope.launch {
             ignitionSweep.snapTo(0f)
-            // 1. Energetic sweep to 100% max gauge (180 km/h and 360-deg clock ring)
+            // 1. Standard automotive deliberate sweep to 100% max gauge (180 km/h and 360-deg clock ring)
             ignitionSweep.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 850, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = 1350, easing = FastOutSlowInEasing)
             )
-            delay(120) // Brief hold at maximum gauge like sports car cluster
-            // 2. Smooth return back to 0 (real live speed and hour)
+            delay(280) // Standard automotive pause at peak redline
+            // 2. Smooth, graceful return back to live readings (real speed & live hour)
             ignitionSweep.animateTo(
                 targetValue = 0f,
-                animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing)
             )
+        }
+    }
+
+    // Trigger gauge sweep every single time the display turns ON (on resume, wake from sleep, charger plug)
+    LaunchedEffect(displayWakeTrigger) {
+        if (displayWakeTrigger > 0L) {
+            triggerIgnitionSweep()
         }
     }
 
@@ -173,15 +182,29 @@ fun TataPunchCockpitView(
         else permittedApps.filter { it.name.contains(searchQuery, ignoreCase = true) }
     }
 
-    // Exact Cockpit Gradient from Uploaded Image: Luminous dark teal glowing backdrop
-    val cockpitGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0F473E), // Upper radiant teal glow
-            Color(0xFF082C25), // Mid automotive teal
-            Color(0xFF031612), // Deep dark cockpit base
-            Color(0xFF010A08)  // Solid black bezel
+    // Cockpit Gradient: Luminous dark teal in Dark Mode, Crisp automotive frost/silver teal in Light Mode
+    val cockpitGradient = if (isLightMode) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFE5F1EC), // Crisp radiant daylight frost
+                Color(0xFFD4E7E1), // Mid clean automotive silver-teal
+                Color(0xFFC3DDD6), // Clean daylight foundation
+                Color(0xFFB5D4CC)  // Base
+            )
         )
-    )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF0F473E), // Upper radiant teal glow
+                Color(0xFF082C25), // Mid automotive teal
+                Color(0xFF031612), // Deep dark cockpit base
+                Color(0xFF010A08)  // Solid black bezel
+            )
+        )
+    }
+
+    val primaryTextColor = if (isLightMode) Color(0xFF0D2822) else Color.White
+    val mutedTextColor = if (isLightMode) Color(0xFF426860) else TataEvTextMuted
 
     Box(
         modifier = modifier
@@ -209,7 +232,7 @@ fun TataPunchCockpitView(
                             fontSize = 20.sp,
                             letterSpacing = 0.5.sp
                         ),
-                        color = Color.White
+                        color = primaryTextColor
                     )
                     Text(
                         text = currentDate,
@@ -217,7 +240,7 @@ fun TataPunchCockpitView(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = TataEvTextMuted
+                        color = mutedTextColor
                     )
                 }
 
@@ -230,8 +253,8 @@ fun TataPunchCockpitView(
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(CockpitTealGlow.copy(alpha = 0.2f))
-                            .border(1.dp, CockpitTealGlow, RoundedCornerShape(20.dp))
+                            .background(if (isLightMode) Color(0xFFD7ECE5) else CockpitTealGlow.copy(alpha = 0.2f))
+                            .border(1.dp, if (isLightMode) Color(0xFF00796B) else CockpitTealGlow, RoundedCornerShape(20.dp))
                             .padding(horizontal = 14.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -239,13 +262,13 @@ fun TataPunchCockpitView(
                         Icon(
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = null,
-                            tint = CockpitTealGlow,
+                            tint = if (isLightMode) Color(0xFF00796B) else CockpitTealGlow,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
                             text = lastAnnouncedText.ifEmpty { "Payment Received" },
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = primaryTextColor
                         )
                     }
                 }
@@ -255,13 +278,13 @@ fun TataPunchCockpitView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    CockpitStatusBarIcons(powerState = powerState)
+                    CockpitStatusBarIcons(powerState = powerState, tint = primaryTextColor)
 
                     // Quick Audio Chime test button
                     Icon(
                         imageVector = Icons.Default.VolumeUp,
                         contentDescription = "Test Audio Chime",
-                        tint = Color.White.copy(alpha = 0.85f),
+                        tint = primaryTextColor.copy(alpha = 0.85f),
                         modifier = Modifier
                             .size(18.dp)
                             .clickable { onQuickChimeTest(110) }
@@ -271,7 +294,7 @@ fun TataPunchCockpitView(
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = "Admin Lock",
-                        tint = CockpitTealGlow,
+                        tint = if (isLightMode) Color(0xFF00796B) else CockpitTealGlow,
                         modifier = Modifier
                             .size(18.dp)
                             .clickable { onOpenSettings() }
@@ -342,6 +365,7 @@ fun TataPunchCockpitView(
                             onRequestGpsPermission = onRequestGpsPermission,
                             ignitionProgress = ignitionSweep.value,
                             onRetriggerIgnition = { triggerIgnitionSweep() },
+                            isLightMode = isLightMode,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -355,6 +379,7 @@ fun TataPunchCockpitView(
                             onToggleAc = { isAcActive = !isAcActive },
                             onToggleAuto = { isAutoActive = !isAutoActive },
                             onAppClick = onAppClick,
+                            isLightMode = isLightMode,
                             modifier = Modifier
                                 .weight(1.35f)
                                 .fillMaxHeight()
@@ -368,6 +393,7 @@ fun TataPunchCockpitView(
                             minute = currentMinute,
                             ignitionProgress = ignitionSweep.value,
                             onRetriggerIgnition = { triggerIgnitionSweep() },
+                            isLightMode = isLightMode,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -389,6 +415,7 @@ fun TataPunchCockpitView(
                             onRequestGpsPermission = onRequestGpsPermission,
                             ignitionProgress = ignitionSweep.value,
                             onRetriggerIgnition = { triggerIgnitionSweep() },
+                            isLightMode = isLightMode,
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -401,6 +428,7 @@ fun TataPunchCockpitView(
                             onToggleAc = { isAcActive = !isAcActive },
                             onToggleAuto = { isAutoActive = !isAutoActive },
                             onAppClick = onAppClick,
+                            isLightMode = isLightMode,
                             modifier = Modifier
                                 .width(360.dp)
                                 .fillMaxHeight()
@@ -413,6 +441,7 @@ fun TataPunchCockpitView(
                             minute = currentMinute,
                             ignitionProgress = ignitionSweep.value,
                             onRetriggerIgnition = { triggerIgnitionSweep() },
+                            isLightMode = isLightMode,
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -436,7 +465,7 @@ fun TataPunchCockpitView(
                     Icon(
                         imageVector = Icons.Default.Home,
                         contentDescription = "Home",
-                        tint = Color.White.copy(alpha = 0.85f),
+                        tint = primaryTextColor.copy(alpha = 0.85f),
                         modifier = Modifier
                             .size(20.dp)
                             .clickable { searchQuery = ""; isSearchOpen = false }
@@ -445,7 +474,7 @@ fun TataPunchCockpitView(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search",
-                        tint = if (isSearchOpen) CockpitTealGlow else Color.White.copy(alpha = 0.85f),
+                        tint = if (isSearchOpen) (if (isLightMode) Color(0xFF00796B) else CockpitTealGlow) else primaryTextColor.copy(alpha = 0.85f),
                         modifier = Modifier
                             .size(20.dp)
                             .clickable { isSearchOpen = !isSearchOpen }
@@ -456,16 +485,18 @@ fun TataPunchCockpitView(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.4f)))
-                        Box(modifier = Modifier.width(16.dp).height(5.dp).clip(RoundedCornerShape(2.5.dp)).background(CockpitTealGlow))
-                        Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.4f)))
-                        Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.4f)))
+                        val dotInactive = if (isLightMode) Color(0xFF8FB3AB) else Color.White.copy(alpha = 0.4f)
+                        val dotActive = if (isLightMode) Color(0xFF00796B) else CockpitTealGlow
+                        Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(dotInactive))
+                        Box(modifier = Modifier.width(16.dp).height(5.dp).clip(RoundedCornerShape(2.5.dp)).background(dotActive))
+                        Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(dotInactive))
+                        Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(dotInactive))
                     }
 
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "Settings",
-                        tint = Color.White.copy(alpha = 0.85f),
+                        tint = primaryTextColor.copy(alpha = 0.85f),
                         modifier = Modifier
                             .size(20.dp)
                             .clickable { onOpenSettings() }
@@ -478,14 +509,14 @@ fun TataPunchCockpitView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(34.dp)
-                    .background(CockpitBottomBarBg)
+                    .background(if (isLightMode) Color(0xFFDCECE6) else CockpitBottomBarBg)
                     .clickable { onPromptSetDefaultLauncher() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Home,
                     contentDescription = "Launcher Home",
-                    tint = Color.White.copy(alpha = 0.9f),
+                    tint = primaryTextColor.copy(alpha = 0.9f),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -504,6 +535,7 @@ fun SpeedometerCockpitCard(
     onRequestGpsPermission: () -> Unit = {},
     ignitionProgress: Float = 0f,
     onRetriggerIgnition: () -> Unit = {},
+    isLightMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isIgnitionSweeping = ignitionProgress > 0.005f
@@ -519,13 +551,43 @@ fun SpeedometerCockpitCard(
         label = "speed"
     )
 
-    val cardGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0F473E), // Upper radiant teal
-            Color(0xFF09312A), // Mid dark teal
-            Color(0xFF05221C)  // Deep cockpit base
+    val cardGradient = if (isLightMode) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFFFFFFF),
+                Color(0xFFF2F8F5),
+                Color(0xFFE6F0EC)
+            )
         )
-    )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF0F473E), // Upper radiant teal
+                Color(0xFF09312A), // Mid dark teal
+                Color(0xFF05221C)  // Deep cockpit base
+            )
+        )
+    }
+
+    val cardBorderColor = if (isLightMode) {
+        if (isIgnitionSweeping) Color(0xFF00897B) else Color(0xFF7CB8AB)
+    } else {
+        if (isIgnitionSweeping) CockpitTealGlow else Color(0xFF1B6B5C).copy(alpha = 0.85f)
+    }
+
+    val headerTextColor = if (isLightMode) Color(0xFF144137) else TataEvTextLight.copy(alpha = 0.9f)
+    val digitsTextColor = if (isLightMode) Color(0xFF0D2822) else Color.White
+    val unitTextColor = if (isLightMode) {
+        if (isIgnitionSweeping) Color(0xFF00796B) else Color(0xFF426860)
+    } else {
+        if (isIgnitionSweeping) TataPunchMint else TataEvTextMuted
+    }
+    val trackBgColor = if (isLightMode) Color(0xFFD3E7E1) else Color(0xFF051C17)
+    val sweepBrushColors = if (isLightMode) {
+        listOf(Color(0xFF00796B), Color(0xFF009688), Color(0xFF26A69A))
+    } else {
+        listOf(TataPunchJade, CockpitTealGlow, TataPunchMint)
+    }
 
     Card(
         modifier = modifier
@@ -533,10 +595,7 @@ fun SpeedometerCockpitCard(
             .clickable { onRetriggerIgnition() },
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = androidx.compose.foundation.BorderStroke(
-            1.5.dp,
-            if (isIgnitionSweeping) CockpitTealGlow else Color(0xFF1B6B5C).copy(alpha = 0.85f)
-        )
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor)
     ) {
         Column(
             modifier = Modifier
@@ -554,7 +613,7 @@ fun SpeedometerCockpitCard(
                     letterSpacing = 2.sp,
                     fontSize = 13.sp
                 ),
-                color = TataEvTextLight.copy(alpha = 0.9f)
+                color = headerTextColor
             )
 
             // Speedometer Circular Dial
@@ -573,7 +632,7 @@ fun SpeedometerCockpitCard(
 
                     // Background track circle
                     drawArc(
-                        color = Color(0xFF051C17),
+                        color = trackBgColor,
                         startAngle = 135f,
                         sweepAngle = 270f,
                         useCenter = false,
@@ -590,9 +649,7 @@ fun SpeedometerCockpitCard(
                     }
 
                     drawArc(
-                        brush = Brush.sweepGradient(
-                            listOf(TataPunchJade, CockpitTealGlow, TataPunchMint)
-                        ),
+                        brush = Brush.sweepGradient(sweepBrushColors),
                         startAngle = 135f,
                         sweepAngle = sweepProgress,
                         useCenter = false,
@@ -611,7 +668,7 @@ fun SpeedometerCockpitCard(
                             fontSize = 44.sp,
                             fontFamily = FontFamily.SansSerif
                         ),
-                        color = Color.White
+                        color = digitsTextColor
                     )
                     Text(
                         text = if (isIgnitionSweeping) "SWEEP" else "km/h",
@@ -619,7 +676,7 @@ fun SpeedometerCockpitCard(
                             fontWeight = if (isIgnitionSweeping) FontWeight.Bold else FontWeight.Normal,
                             fontSize = 12.sp
                         ),
-                        color = if (isIgnitionSweeping) TataPunchMint else TataEvTextMuted
+                        color = unitTextColor
                     )
                 }
             }
@@ -634,7 +691,7 @@ fun SpeedometerCockpitCard(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (hasGpsFix) TataPunchMint else Color(0xFFFFB300))
+                        .background(if (hasGpsFix) (if (isLightMode) Color(0xFF00796B) else TataPunchMint) else Color(0xFFFFB300))
                 )
                 Text(
                     text = if (hasGpsFix) "GPS: Real-time ($gpsStatusText)" else "$gpsStatusText • Tap to allow",
@@ -642,7 +699,7 @@ fun SpeedometerCockpitCard(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = if (hasGpsFix) TataPunchMint else TataEvTextMuted
+                    color = if (hasGpsFix) (if (isLightMode) Color(0xFF00796B) else TataPunchMint) else (if (isLightMode) Color(0xFF6B8E86) else TataEvTextMuted)
                 )
             }
         }
@@ -660,21 +717,39 @@ fun AllowedAppsCockpitCard(
     onToggleAc: () -> Unit,
     onToggleAuto: () -> Unit,
     onAppClick: (String) -> Unit,
+    isLightMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val cardGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0F473E),
-            Color(0xFF09312A),
-            Color(0xFF05221C)
+    val cardGradient = if (isLightMode) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFFFFFFF),
+                Color(0xFFF2F8F5),
+                Color(0xFFE6F0EC)
+            )
         )
-    )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF0F473E),
+                Color(0xFF09312A),
+                Color(0xFF05221C)
+            )
+        )
+    }
+
+    val cardBorderColor = if (isLightMode) Color(0xFF7CB8AB) else Color(0xFF1B6B5C).copy(alpha = 0.85f)
+    val headerTextColor = if (isLightMode) Color(0xFF144137) else TataEvTextLight.copy(alpha = 0.9f)
+    val appTextColor = if (isLightMode) Color(0xFF0D2822) else Color.White
+    val controlActiveColor = if (isLightMode) Color(0xFF0D2822) else Color.White
+    val controlInactiveColor = if (isLightMode) Color(0xFF6B8E86) else TataEvTextMuted
+    val controlBarColor = if (isLightMode) Color(0xFF00796B) else CockpitTealGlow
 
     Card(
         modifier = modifier.testTag("allowed_apps_card"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF1B6B5C).copy(alpha = 0.85f))
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor)
     ) {
         Column(
             modifier = Modifier
@@ -692,7 +767,7 @@ fun AllowedAppsCockpitCard(
                     letterSpacing = 2.sp,
                     fontSize = 13.sp
                 ),
-                color = TataEvTextLight.copy(alpha = 0.9f)
+                color = headerTextColor
             )
 
             // Middle: 2-Row x 4-Col Apps Grid with sleek right scrollbar indicator
@@ -719,6 +794,8 @@ fun AllowedAppsCockpitCard(
                                 name = app.name,
                                 iconRes = null,
                                 iconBitmap = null,
+                                textColor = appTextColor,
+                                isLightMode = isLightMode,
                                 onClick = { onAppClick(app.packageName) }
                             )
                         }
@@ -729,6 +806,8 @@ fun AllowedAppsCockpitCard(
                                 name = app.name,
                                 iconRes = null,
                                 iconBitmap = bitmap,
+                                textColor = appTextColor,
+                                isLightMode = isLightMode,
                                 onClick = { onAppClick(app.packageName) }
                             )
                         }
@@ -741,7 +820,7 @@ fun AllowedAppsCockpitCard(
                         .width(4.dp)
                         .height(48.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.45f))
+                        .background(if (isLightMode) Color(0xFF7CB8AB).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.45f))
                 )
             }
 
@@ -764,7 +843,7 @@ fun AllowedAppsCockpitCard(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         ),
-                        color = if (isAcActive) Color.White else TataEvTextMuted
+                        color = if (isAcActive) controlActiveColor else controlInactiveColor
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Box(
@@ -772,7 +851,7 @@ fun AllowedAppsCockpitCard(
                             .width(22.dp)
                             .height(3.dp)
                             .clip(RoundedCornerShape(1.5.dp))
-                            .background(if (isAcActive) CockpitTealGlow else Color.Transparent)
+                            .background(if (isAcActive) controlBarColor else Color.Transparent)
                     )
                 }
 
@@ -780,7 +859,7 @@ fun AllowedAppsCockpitCard(
                 Icon(
                     imageVector = Icons.Default.Air,
                     contentDescription = "Airflow",
-                    tint = Color.White.copy(alpha = 0.85f),
+                    tint = if (isLightMode) Color(0xFF0D2822).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.85f),
                     modifier = Modifier.size(20.dp)
                 )
 
@@ -795,7 +874,7 @@ fun AllowedAppsCockpitCard(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         ),
-                        color = if (isAutoActive) Color.White else TataEvTextMuted
+                        color = if (isAutoActive) controlActiveColor else controlInactiveColor
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Box(
@@ -803,7 +882,7 @@ fun AllowedAppsCockpitCard(
                             .width(26.dp)
                             .height(3.dp)
                             .clip(RoundedCornerShape(1.5.dp))
-                            .background(if (isAutoActive) CockpitTealGlow else Color.Transparent)
+                            .background(if (isAutoActive) controlBarColor else Color.Transparent)
                     )
                 }
             }
@@ -822,6 +901,7 @@ fun DigitalClockCockpitCard(
     minute: Int,
     ignitionProgress: Float = 0f,
     onRetriggerIgnition: () -> Unit = {},
+    isLightMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isIgnitionSweeping = ignitionProgress > 0.005f
@@ -835,13 +915,57 @@ fun DigitalClockCockpitCard(
         (progressFraction * 360f).coerceAtLeast(20f)
     }
 
-    val cardGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0F473E),
-            Color(0xFF09312A),
-            Color(0xFF05221C)
+    val cardGradient = if (isLightMode) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFFFFFFF),
+                Color(0xFFF2F8F5),
+                Color(0xFFE6F0EC)
+            )
         )
-    )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF0F473E),
+                Color(0xFF09312A),
+                Color(0xFF05221C)
+            )
+        )
+    }
+
+    val cardBorderColor = if (isLightMode) {
+        if (isIgnitionSweeping) Color(0xFF00897B) else Color(0xFF7CB8AB)
+    } else {
+        if (isIgnitionSweeping) CockpitTealGlow else Color(0xFF1B6B5C).copy(alpha = 0.85f)
+    }
+
+    val headerTextColor = if (isLightMode) Color(0xFF144137) else TataEvTextLight.copy(alpha = 0.9f)
+    val digitsTextColor = if (isLightMode) Color(0xFF0D2822) else Color.White
+    val amPmTextColor = if (isLightMode) {
+        if (isIgnitionSweeping) Color(0xFF00796B) else Color(0xFF426860)
+    } else {
+        if (isIgnitionSweeping) TataPunchMint else TataPunchMint.copy(alpha = 0.9f)
+    }
+    val dialBackgroundColors = if (isLightMode) {
+        listOf(Color(0xFFFFFFFF), Color(0xFFE6F0EC))
+    } else {
+        listOf(Color(0xFF0C463C), Color(0xFF041F1A))
+    }
+    val trackRingColor = if (isLightMode) Color(0xFFD3E7E1) else Color(0xFF0B342C)
+    val outerBezelColor = if (isLightMode) Color(0xFF7CB8AB).copy(alpha = 0.6f) else Color(0xFF1B6B5C).copy(alpha = 0.6f)
+    val clockSweepColors = if (isLightMode) {
+        if (isIgnitionSweeping) {
+            listOf(Color(0xFF00796B), Color(0xFF009688), Color(0xFF26A69A))
+        } else {
+            listOf(Color(0xFF00796B), Color(0xFF009688), Color(0xFF26A69A))
+        }
+    } else {
+        if (isIgnitionSweeping) {
+            listOf(CockpitTealGlow, TataPunchMint, CockpitTealGlow)
+        } else {
+            listOf(TataPunchJade, TataPunchMint, TataPunchJade)
+        }
+    }
 
     Card(
         modifier = modifier
@@ -849,10 +973,7 @@ fun DigitalClockCockpitCard(
             .clickable { onRetriggerIgnition() },
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = androidx.compose.foundation.BorderStroke(
-            1.5.dp,
-            if (isIgnitionSweeping) CockpitTealGlow else Color(0xFF1B6B5C).copy(alpha = 0.85f)
-        )
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor)
     ) {
         Column(
             modifier = Modifier
@@ -870,7 +991,7 @@ fun DigitalClockCockpitCard(
                     letterSpacing = 2.sp,
                     fontSize = 13.sp
                 ),
-                color = TataEvTextLight.copy(alpha = 0.9f)
+                color = headerTextColor
             )
 
             // Round Circular Gauge Ring with Digital Time Inside (Exact from photo 1)
@@ -888,7 +1009,7 @@ fun DigitalClockCockpitCard(
                     // Dial background: radial gradient
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(Color(0xFF0C463C), Color(0xFF041F1A)),
+                            colors = dialBackgroundColors,
                             center = center,
                             radius = radius
                         ),
@@ -898,7 +1019,7 @@ fun DigitalClockCockpitCard(
 
                     // Track background ring
                     drawCircle(
-                        color = Color(0xFF0B342C),
+                        color = trackRingColor,
                         radius = radius,
                         center = center,
                         style = Stroke(width = 6.dp.toPx())
@@ -906,7 +1027,7 @@ fun DigitalClockCockpitCard(
 
                     // Outer fine bezel
                     drawCircle(
-                        color = Color(0xFF1B6B5C).copy(alpha = 0.6f),
+                        color = outerBezelColor,
                         radius = radius + 3.dp.toPx(),
                         center = center,
                         style = Stroke(width = 1.dp.toPx())
@@ -915,11 +1036,7 @@ fun DigitalClockCockpitCard(
                     // Active 12-hour progression arc (Sweeps 360° on ignition, then returns to current hour)
                     drawArc(
                         brush = Brush.sweepGradient(
-                            colors = if (isIgnitionSweeping) {
-                                listOf(CockpitTealGlow, TataPunchMint, CockpitTealGlow)
-                            } else {
-                                listOf(TataPunchJade, TataPunchMint, TataPunchJade)
-                            },
+                            colors = clockSweepColors,
                             center = center
                         ),
                         startAngle = -90f,
@@ -942,7 +1059,7 @@ fun DigitalClockCockpitCard(
                             letterSpacing = 2.sp,
                             fontSize = 32.sp
                         ),
-                        color = Color.White
+                        color = digitsTextColor
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -952,7 +1069,7 @@ fun DigitalClockCockpitCard(
                             letterSpacing = 1.5.sp,
                             fontSize = 12.sp
                         ),
-                        color = TataPunchMint.copy(alpha = 0.9f)
+                        color = amPmTextColor
                     )
                 }
             }
@@ -964,7 +1081,7 @@ fun DigitalClockCockpitCard(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = if (isIgnitionSweeping) TataPunchMint else TataEvTextMuted
+                color = if (isIgnitionSweeping) (if (isLightMode) Color(0xFF00796B) else TataPunchMint) else (if (isLightMode) Color(0xFF426860) else TataEvTextMuted)
             )
         }
     }
@@ -976,6 +1093,8 @@ fun AppIconItemView(
     name: String,
     iconRes: Int?,
     iconBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+    textColor: Color = Color.White,
+    isLightMode: Boolean = false,
     onClick: () -> Unit
 ) {
     Column(
@@ -986,16 +1105,23 @@ fun AppIconItemView(
             .clickable { onClick() }
             .padding(4.dp)
     ) {
+        val iconBoxBg = if (isLightMode) {
+            Brush.verticalGradient(
+                listOf(Color(0xFFE2EFEA), Color(0xFFD4E7E1))
+            )
+        } else {
+            Brush.verticalGradient(
+                listOf(Color(0xFF145246), Color(0xFF092922))
+            )
+        }
+        val iconBoxBorder = if (isLightMode) Color(0xFF7CB8AB).copy(alpha = 0.8f) else Color(0xFF1D6F60).copy(alpha = 0.6f)
+
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xFF145246), Color(0xFF092922))
-                    )
-                )
-                .border(1.dp, Color(0xFF1D6F60).copy(alpha = 0.6f), RoundedCornerShape(12.dp)),
+                .background(iconBoxBg)
+                .border(1.dp, iconBoxBorder, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             if (iconBitmap != null) {
@@ -1008,7 +1134,7 @@ fun AppIconItemView(
                 Icon(
                     imageVector = Icons.Default.Apps,
                     contentDescription = name,
-                    tint = TataPunchMint,
+                    tint = if (isLightMode) Color(0xFF00796B) else TataPunchMint,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -1020,7 +1146,7 @@ fun AppIconItemView(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium
             ),
-            color = Color.White,
+            color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

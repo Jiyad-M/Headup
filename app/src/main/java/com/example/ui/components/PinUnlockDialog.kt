@@ -129,12 +129,14 @@ fun PinUnlockDialog(
                     PinPurpose.EXIT_KIOSK -> "Authorize Kiosk Exit"
                     PinPurpose.UNINSTALL_APP -> "Authorize App Uninstall"
                     PinPurpose.ADMIN_ACCESS -> "Admin Kiosk Unlock"
+                    PinPurpose.UNLOCK_BLOCKED_APP -> "Unlock Blocked App"
                 }
 
                 val subtitleText = when (purpose) {
                     PinPurpose.EXIT_KIOSK -> "Enter 8-digit password to leave kiosk and select default launcher."
                     PinPurpose.UNINSTALL_APP -> "Enter 8-digit password to confirm uninstalling the kiosk application."
                     PinPurpose.ADMIN_ACCESS -> "Enter 8-digit Kiosk Password to access settings and whitelist."
+                    PinPurpose.UNLOCK_BLOCKED_APP -> "Enter 8-digit password to authorize and open this protected app."
                 }
 
                 Text(

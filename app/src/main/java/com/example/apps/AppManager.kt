@@ -86,22 +86,38 @@ class AppManager(
         all.filter { allowedSet.contains(it.packageName) && !blacklistSet.contains(it.packageName) }
     }
 
+    private val temporaryAuthorizedPackages = mutableMapOf<String, Long>()
+
+    /**
+     * Authorizes an app temporarily (e.g. 10 minutes) after 8-digit password entry.
+     */
+    fun authorizeTemporarily(packageName: String, durationMillis: Long = 10 * 60 * 1000L) {
+        temporaryAuthorizedPackages[packageName] = System.currentTimeMillis() + durationMillis
+    }
+
     /**
      * Validates whether an app package is permitted.
      * When kiosk is activated:
-     * - Blacklisted apps are STRICTLY DENIED.
-     * - Non-whitelisted apps are STRICTLY DENIED.
+     * - Temporarily password-unlocked apps are ALLOWED.
+     * - Blacklisted apps are STRICTLY DENIED unless temporarily password-unlocked.
+     * - Non-whitelisted apps are STRICTLY DENIED unless temporarily password-unlocked.
      */
     fun isPackageAllowed(packageName: String): Boolean {
         if (packageName == context.packageName) return true
         if (!preferences.isActivated) return true
 
-        // Strict Blacklist Check: cannot open anyway
+        // 1. Password-unlocked temporary authorization
+        val tempExpiry = temporaryAuthorizedPackages[packageName]
+        if (tempExpiry != null && System.currentTimeMillis() < tempExpiry) {
+            return true
+        }
+
+        // 2. Strict Blacklist Check: cannot open anyway
         if (preferences.blacklistedPackages.contains(packageName)) {
             return false
         }
 
-        // Whitelist Check: only permitted apps can open
+        // 3. Whitelist Check: only permitted apps can open
         return preferences.allowedPackages.contains(packageName)
     }
 
@@ -150,6 +166,26 @@ class AppManager(
             } else false
         } catch (e: Exception) {
             Log.e("AppManager", "Failed to launch $packageName", e)
+            false
+        }
+    }
+
+    /**
+     * Directly launches an app once authorized via 8-digit password.
+     */
+    fun launchAppDirectly(packageName: String): Boolean {
+        return try {
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } else {
+                Log.w("AppManager", "No launch intent found for $packageName")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("AppManager", "Failed to launch directly $packageName", e)
             false
         }
     }

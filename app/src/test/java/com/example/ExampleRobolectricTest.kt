@@ -258,4 +258,52 @@ class ExampleRobolectricTest {
     prefs.speechEngine = googleServices.id
     assertEquals("GOOGLE_SPEECH_SERVICES", prefs.speechEngine)
   }
+
+  @Test
+  fun `test blocked apps protected with password and temporary authorization`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+    val appManager = com.example.apps.AppManager(context, prefs)
+    val securityManager = KioskSecurityManager(context, prefs)
+
+    prefs.isActivated = true
+    prefs.pin = "88776655"
+    prefs.allowedPackages = setOf("com.google.android.apps.maps")
+    prefs.blacklistedPackages = setOf("com.secret.vault")
+
+    // 1. Initial state: unallowed app is blocked
+    val testPkg = "com.unallowed.game"
+    assertFalse(appManager.isPackageAllowed(testPkg))
+    assertFalse(appManager.isPackageAllowed("com.secret.vault"))
+    assertTrue(appManager.isPackageAllowed("com.google.android.apps.maps"))
+
+    // 2. PIN verification
+    assertTrue(securityManager.verifyPin("88776655"))
+    assertFalse(securityManager.verifyPin("00000000"))
+
+    // 3. Authorize temporarily via password unlock
+    appManager.authorizeTemporarily(testPkg, durationMillis = 600_000L)
+    assertTrue(appManager.isPackageAllowed(testPkg))
+
+    // 4. Verify PinPurpose.UNLOCK_BLOCKED_APP exists
+    val purpose = PinPurpose.UNLOCK_BLOCKED_APP
+    assertEquals("UNLOCK_BLOCKED_APP", purpose.name)
+  }
+
+  @Test
+  fun `test light mode and dark mode preferences toggle`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+
+    // Default is dark mode
+    assertFalse(prefs.isLightMode)
+
+    // Toggle to Light mode
+    prefs.isLightMode = true
+    assertTrue(prefs.isLightMode)
+
+    // Toggle back to Dark mode
+    prefs.isLightMode = false
+    assertFalse(prefs.isLightMode)
+  }
 }

@@ -114,6 +114,8 @@ fun AdminSettingsSheet(
     selectedTone: SoundboxTone = SoundboxTone.PAYTM_TRIAD,
     selectedSpeechEngine: SpeechEngine = SpeechEngine.NATURAL_CLOUD,
     isDefaultHome: Boolean = false,
+    isLightMode: Boolean = false,
+    onToggleLightMode: (Boolean) -> Unit = {},
     onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onToggleAppBlacklisted: (String, Boolean) -> Unit = { _, _ -> },
@@ -233,7 +235,12 @@ fun AdminSettingsSheet(
                             onToggleAppAllowed = onToggleAppAllowed,
                             onToggleAppBlacklisted = onToggleAppBlacklisted
                         )
-                        1 -> HudThemeTab(currentTheme = currentTheme, onThemeChange = onThemeChange)
+                        1 -> HudThemeTab(
+                            currentTheme = currentTheme,
+                            onThemeChange = onThemeChange,
+                            isLightMode = isLightMode,
+                            onToggleLightMode = onToggleLightMode
+                        )
                         2 -> PowerSettingsTab(
                             autoDisplayOnPlugged = autoDisplayOnPlugged,
                             sleepOnUnplugged = sleepOnUnplugged,
@@ -306,21 +313,137 @@ fun AdminSettingsSheet(
 @Composable
 fun HudThemeTab(
     currentTheme: AutomotiveBrandTheme,
-    onThemeChange: (AutomotiveBrandTheme) -> Unit
+    onThemeChange: (AutomotiveBrandTheme) -> Unit,
+    isLightMode: Boolean = false,
+    onToggleLightMode: (Boolean) -> Unit = {}
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 1. APPEARANCE MODE (Dark Cockpit / Daylight Mode)
         Text(
-            text = "Automotive Head-Up Display (HUD) Themes",
+            text = "Cockpit Appearance Mode",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = Color.White
         )
         Text(
-            text = "Switch between Tesla minimalist cockpit, Tata Curvv EV instrument cluster, or high-contrast night windshield projection mode.",
+            text = "Switch between Deep Teal Night Cockpit and Crisp Daylight Silver/Jade Mode.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Dark Mode Option Card
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onToggleLightMode(false) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (!isLightMode) Color(0xFF0F473E) else CockpitCard
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    if (!isLightMode) 2.dp else 1.dp,
+                    if (!isLightMode) HudMint else CockpitBorder
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Dark Mode",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                        Icon(
+                            imageVector = if (!isLightMode) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = if (!isLightMode) HudMint else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Text(
+                        text = "Deep luminous glowing teal cluster, optimized for night driving and OLED screens.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (!isLightMode) {
+                        Text(
+                            text = "ACTIVE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            color = HudMint
+                        )
+                    }
+                }
+            }
+
+            // Light Mode Option Card
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onToggleLightMode(true) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isLightMode) Color(0xFFE2EFEA) else CockpitCard
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    if (isLightMode) 2.dp else 1.dp,
+                    if (isLightMode) Color(0xFF00796B) else CockpitBorder
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Light Mode",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (isLightMode) Color(0xFF0A2922) else Color.White
+                        )
+                        Icon(
+                            imageVector = if (isLightMode) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = if (isLightMode) Color(0xFF00796B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Text(
+                        text = "Crisp daylight silver & jade cockpit, ultra-clear visibility under bright sunlight.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = if (isLightMode) Color(0xFF32544C) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (isLightMode) {
+                        Text(
+                            text = "ACTIVE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            color = Color(0xFF00796B)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Automotive Instrument Cluster Brands",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = Color.White
         )
 
         AutomotiveBrandTheme.values().forEach { theme ->

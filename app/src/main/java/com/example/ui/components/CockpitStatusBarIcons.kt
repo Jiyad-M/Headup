@@ -21,7 +21,8 @@ import com.example.ui.theme.CockpitTealGlow
 @Composable
 fun CockpitStatusBarIcons(
     powerState: PowerState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White.copy(alpha = 0.9f)
 ) {
     Row(
         modifier = modifier,
@@ -29,7 +30,7 @@ fun CockpitStatusBarIcons(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // 1. Bluetooth Icon
-        BluetoothIcon(color = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))
+        BluetoothIcon(color = tint, modifier = Modifier.size(16.dp))
 
         // 2. Battery Icon with charging bolt / level
         CockpitBatteryIcon(
@@ -39,10 +40,10 @@ fun CockpitStatusBarIcons(
         )
 
         // 3. Wi-Fi Icon
-        CockpitWifiIcon(color = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))
+        CockpitWifiIcon(color = tint, modifier = Modifier.size(16.dp))
 
         // 4. Cellular 4-Bar Signal Icon
-        CockpitCellularIcon(color = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))
+        CockpitCellularIcon(color = tint, modifier = Modifier.size(16.dp))
     }
 }
 

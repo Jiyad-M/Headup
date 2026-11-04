@@ -44,7 +44,6 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:resizeableActivity="false"
         android:theme="@style/Theme.MyApplication">
         <activity
             android:name=".MainActivity"
@@ -52,9 +51,6 @@
             android:launchMode="singleTask"
             android:clearTaskOnLaunch="true"
             android:stateNotNeeded="true"
-            android:resizeableActivity="false"
-            android:supportsPictureInPicture="false"
-            android:documentLaunchMode="never"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MyApplication">
             <intent-filter android:priority="1000">

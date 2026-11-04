@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -33,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -107,6 +110,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val pinError by viewModel.pinError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     val blockedAppAttempt by viewModel.blockedAppAttempt.collectAsStateWithLifecycle()
+    val displayWakeTrigger by viewModel.displayWakeTrigger.collectAsStateWithLifecycle()
+    val isLightMode by viewModel.isLightMode.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -171,6 +176,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher(homeRoleLauncher) },
             onOpenSettings = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
             onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) },
+            displayWakeTrigger = displayWakeTrigger,
+            isLightMode = isLightMode,
             onRequestGpsPermission = {
                 locationPermissionLauncher.launch(
                     arrayOf(
@@ -289,6 +296,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 selectedTone = soundboxTone,
                 selectedSpeechEngine = speechEngine,
                 isDefaultHome = isDefaultHome,
+                isLightMode = isLightMode,
+                onToggleLightMode = { viewModel.setLightMode(it) },
                 onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },
                 onToggleAppBlacklisted = { pkg, blacklisted -> viewModel.toggleAppBlacklisted(pkg, blacklisted) },
@@ -315,44 +324,60 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             )
         }
 
-        // 10. Access Denied Dialog when user attempts to open an unauthorized/blacklisted app
+        // 10. Password Protection Dialog when user attempts to open a blocked/blacklisted app
         if (blockedAppAttempt != null) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissBlockedDialog() },
                 icon = {
                     Icon(
-                        imageVector = Icons.Default.Block,
+                        imageVector = Icons.Default.Lock,
                         contentDescription = null,
-                        tint = CrimsonRed,
+                        tint = AmberGold,
                         modifier = Modifier.size(36.dp)
                     )
                 },
                 title = {
                     Text(
-                        text = "ACCESS DENIED",
+                        text = "PROTECTED APPLICATION",
                         fontWeight = FontWeight.ExtraBold,
-                        color = CrimsonRed
+                        color = AmberGold
                     )
                 },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "The application '$blockedAppAttempt' is blacklisted and strictly blocked by Kiosk Mode.",
+                            text = "The application '$blockedAppAttempt' is protected by Kiosk Mode.",
                             color = Color.White
                         )
                         Text(
-                            text = "Access to non-whitelisted and blacklisted applications is completely denied under active kiosk mode.",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            text = "To authorize and launch this application, enter your 8-digit admin password.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
                 confirmButton = {
                     Button(
-                        onClick = { viewModel.dismissBlockedDialog() },
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonRed)
+                        onClick = {
+                            viewModel.openPinDialog(PinPurpose.UNLOCK_BLOCKED_APP)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AmberGold)
                     ) {
-                        Text("Dismiss", fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Unlock with Password", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { viewModel.dismissBlockedDialog() }
+                    ) {
+                        Text("Dismiss", color = Color.White.copy(alpha = 0.7f))
                     }
                 },
                 containerColor = Slate900,

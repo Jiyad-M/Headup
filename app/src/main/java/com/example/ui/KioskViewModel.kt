@@ -35,7 +35,8 @@ import kotlinx.coroutines.launch
 enum class PinPurpose {
     ADMIN_ACCESS,
     EXIT_KIOSK,
-    UNINSTALL_APP
+    UNINSTALL_APP,
+    UNLOCK_BLOCKED_APP
 }
 
 class KioskViewModel(
@@ -98,6 +99,15 @@ class KioskViewModel(
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    private var pendingUnlockPackage: String? = null
+
+    private val _displayWakeTrigger = MutableStateFlow(System.currentTimeMillis())
+    val displayWakeTrigger: StateFlow<Long> = _displayWakeTrigger.asStateFlow()
+
+    fun triggerDisplayWake() {
+        _displayWakeTrigger.value = System.currentTimeMillis()
+    }
+
     private val _blockedAppAttempt = MutableStateFlow<String?>(null)
     val blockedAppAttempt: StateFlow<String?> = _blockedAppAttempt.asStateFlow()
 
@@ -121,6 +131,9 @@ class KioskViewModel(
         }
     )
     val hudTheme: StateFlow<AutomotiveBrandTheme> = _hudTheme.asStateFlow()
+
+    private val _isLightMode = MutableStateFlow(preferences.isLightMode)
+    val isLightMode: StateFlow<Boolean> = _isLightMode.asStateFlow()
 
     val powerState: StateFlow<PowerState> = powerMonitor.powerState
     val isDisplayCompletelyOff: StateFlow<Boolean> = powerMonitor.isDisplayCompletelyOff
@@ -309,6 +322,7 @@ class KioskViewModel(
 
     fun wakeDisplay() {
         powerMonitor.wakeDisplay()
+        triggerDisplayWake()
     }
 
     fun checkNotificationAccessGranted(): Boolean {
@@ -346,6 +360,12 @@ class KioskViewModel(
         preferences.hudTheme = theme.name
     }
 
+    fun setLightMode(enabled: Boolean) {
+        preferences.isLightMode = enabled
+        _isLightMode.value = enabled
+        _statusMessage.value = if (enabled) "Switched to Daylight Cockpit Mode" else "Switched to Night Cockpit Mode"
+    }
+
     fun refreshApps() {
         viewModelScope.launch {
             _permittedApps.value = appManager.getPermittedApps()
@@ -359,8 +379,9 @@ class KioskViewModel(
 
     fun launchApp(pkg: String) {
         if (!appManager.isPackageAllowed(pkg)) {
+            pendingUnlockPackage = pkg
             _blockedAppAttempt.value = pkg
-            _statusMessage.value = "ACCESS DENIED: $pkg is blacklisted and blocked by Kiosk."
+            _statusMessage.value = "ACCESS PROTECTED: $pkg requires 8-digit password to open."
             return
         }
         val success = appManager.launchApp(pkg)
@@ -370,12 +391,14 @@ class KioskViewModel(
     }
 
     fun dismissBlockedDialog() {
+        pendingUnlockPackage = null
         _blockedAppAttempt.value = null
     }
 
     fun notifyAppBlocked(pkg: String) {
+        pendingUnlockPackage = pkg
         _blockedAppAttempt.value = pkg
-        _statusMessage.value = "ACCESS DENIED: $pkg is blacklisted and blocked by Kiosk."
+        _statusMessage.value = "ACCESS PROTECTED: $pkg requires 8-digit password to open."
     }
 
     fun toggleAppBlacklisted(pkg: String, isBlacklisted: Boolean) {
@@ -426,6 +449,16 @@ class KioskViewModel(
                 PinPurpose.ADMIN_ACCESS -> {
                     _isAdminAuthenticated.value = true
                     _showAdminSettings.value = true
+                }
+                PinPurpose.UNLOCK_BLOCKED_APP -> {
+                    val pkgToUnlock = pendingUnlockPackage
+                    pendingUnlockPackage = null
+                    _blockedAppAttempt.value = null
+                    if (pkgToUnlock != null) {
+                        _statusMessage.value = "Password Verified. Unlocking $pkgToUnlock..."
+                        appManager.authorizeTemporarily(pkgToUnlock)
+                        appManager.launchAppDirectly(pkgToUnlock)
+                    }
                 }
             }
         } else {

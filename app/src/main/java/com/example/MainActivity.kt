@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
         viewModel.refreshDefaultHomeState()
         viewModel.refreshApps()
         viewModel.loadPaymentHistory()
+        viewModel.triggerDisplayWake()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -47,21 +48,6 @@ class MainActivity : ComponentActivity() {
         val blockedPkg = intent.getStringExtra("BLOCKED_APP_PKG")
         if (!blockedPkg.isNullOrEmpty()) {
             viewModel.notifyAppBlocked(blockedPkg)
-        }
-    }
-
-    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: android.content.res.Configuration) {
-        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
-        if (isInMultiWindowMode && viewModel.isActivated.value) {
-            // Samsung tablet split-screen / multi-window attempted: immediately restore full screen kiosk
-            val intent = android.content.Intent(this, MainActivity::class.java).apply {
-                addFlags(
-                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-                )
-            }
-            startActivity(intent)
         }
     }
 }
