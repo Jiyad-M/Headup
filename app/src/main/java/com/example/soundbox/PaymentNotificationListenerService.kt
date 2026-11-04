@@ -30,16 +30,60 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             "com.icicibank.pockets"                   // ICICI Pockets
         )
 
+        // Promotional / advertisement keywords that must NEVER trigger payment alerts
+        val PROMOTIONAL_KEYWORDS = listOf(
+            "cashback", "offer", "discount", "save", "coupon", "voucher", "deal", "promo",
+            "sale", "win", "earn", "reward", "scratch card", "flat", "upto", "up to",
+            "pre-approved", "preapproved", "loan", "apply now", "apply for", "interest rate",
+            "recharge", "bill due", "pay bill", "overdue", "reminder", "pending", "expire",
+            "order placed", "order confirmed", "delivering", "shipped", "out for delivery",
+            "movie ticket", "flight", "bus booking", "hotel", "gift card", "refer", "claim", "spin"
+        )
+
+        // Debit / outgoing payment keywords that must be ignored
+        val DEBIT_KEYWORDS = listOf(
+            "debited", "paid to", "sent to", "transferred to", "spent", "withdrawn", "paid at",
+            "payment to", "deducted from"
+        )
+
+        // Verified positive incoming credit keywords
+        val CREDIT_KEYWORDS = listOf(
+            "paid you", "received", "credited with", "credited by", "credited to", "has been credited",
+            "payment received", "received payment", "sent you", "accepted payment", "money received",
+            "payment from"
+        )
+
+        /**
+         * Validates whether a notification text represents a real incoming payment
+         * and not an advertisement, discount promo, or debit.
+         */
+        fun isGenuinePaymentInflow(text: String): Boolean {
+            val lower = text.lowercase()
+
+            // 1. Strictly exclude debits
+            if (DEBIT_KEYWORDS.any { lower.contains(it) }) {
+                return false
+            }
+
+            // 2. Strictly exclude advertisements, marketing and promos
+            if (PROMOTIONAL_KEYWORDS.any { lower.contains(it) }) {
+                return false
+            }
+
+            // 3. Require explicit positive credit inflow keywords
+            return CREDIT_KEYWORDS.any { lower.contains(it) }
+        }
+
         /**
          * Extracts amount from notification text.
-         * Matches:
-         * "SURANYA G paid you ₹110.00" -> 110.0
-         * "SHIJIMOL NELLENGARA paid you ₹182.00 Aysha" -> 182.0
-         * "TANAY SARKAR paid you ₹68.00" -> 68.0
-         * "Received ₹500.00 on Paytm" -> 500.0
-         * "A/C credited with Rs 150.00 by UPI" -> 150.0
+         * Only returns amount if text represents genuine incoming money.
          */
         fun parsePaymentAmount(text: String): Double? {
+            // Must be genuine incoming payment, not an ad or outgoing debit
+            if (!isGenuinePaymentInflow(text)) {
+                return null
+            }
+
             // Pattern 1: ₹ or Rs. or INR followed by number (e.g. ₹110.00, Rs 500, INR 1,200)
             val regex = Pattern.compile("(?:[₹]|Rs\\.?|INR)\\s*([0-9]+(?:[,.][0-9]{1,2})?)", Pattern.CASE_INSENSITIVE)
             val matcher = regex.matcher(text)
@@ -96,43 +140,33 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
             val fullContent = "$title $text $bigText"
 
-            Log.d(TAG, "Notification received from [$pkg]: $fullContent")
-
-            // Determine app name for announcement (e.g. Google Pay, PhonePe, Paytm)
-            val appName = when {
-                pkg.contains("paisa", ignoreCase = true) || fullContent.contains("gpay", ignoreCase = true) || fullContent.contains("google", ignoreCase = true) -> "Google Pay"
-                pkg.contains("phonepe", ignoreCase = true) || fullContent.contains("phonepe", ignoreCase = true) -> "PhonePe"
-                pkg.contains("paytm", ignoreCase = true) || fullContent.contains("paytm", ignoreCase = true) -> "Paytm"
-                pkg.contains("bhim", ignoreCase = true) || fullContent.contains("bhim", ignoreCase = true) -> "BHIM UPI"
-                pkg.contains("bharatpe", ignoreCase = true) -> "BharatPe"
-                else -> "UPI Payment"
-            }
-
-            // Check if notification contains payment indicators
-            val isPaymentApp = PAYMENT_PACKAGES.contains(pkg)
-            val hasPaymentKeywords = fullContent.contains("paid you", ignoreCase = true) ||
-                    fullContent.contains("received", ignoreCase = true) ||
-                    fullContent.contains("credited", ignoreCase = true) ||
-                    fullContent.contains("payment from", ignoreCase = true) ||
-                    fullContent.contains("upi ref", ignoreCase = true) ||
-                    fullContent.contains("₹")
-
-            if (isPaymentApp || hasPaymentKeywords) {
-                val amount = parsePaymentAmount(fullContent)
-                if (amount != null && amount > 0) {
-                    Log.i(TAG, "Extracted payment amount: ₹$amount from $appName!")
-
-                    // Call the shared SoundboxManager singleton so pre-warmed TTS announces immediately
-                    val soundboxManager = PaymentSoundboxManager.getInstance(applicationContext)
-                    soundboxManager.announcePayment(
-                        amount = amount,
-                        currencySymbol = "₹",
-                        appName = appName
-                    )
-
-                    // Notify UI listeners
-                    onPaymentReceivedListener?.invoke(amount, fullContent)
+            // Check if notification is genuine incoming payment and extract amount
+            val amount = parsePaymentAmount(fullContent)
+            if (amount != null && amount > 0) {
+                // Determine app name for announcement (e.g. Google Pay, PhonePe, Paytm)
+                val appName = when {
+                    pkg.contains("paisa", ignoreCase = true) || fullContent.contains("gpay", ignoreCase = true) || fullContent.contains("google", ignoreCase = true) -> "Google Pay"
+                    pkg.contains("phonepe", ignoreCase = true) || fullContent.contains("phonepe", ignoreCase = true) -> "PhonePe"
+                    pkg.contains("paytm", ignoreCase = true) || fullContent.contains("paytm", ignoreCase = true) -> "Paytm"
+                    pkg.contains("bhim", ignoreCase = true) || fullContent.contains("bhim", ignoreCase = true) -> "BHIM UPI"
+                    pkg.contains("bharatpe", ignoreCase = true) -> "BharatPe"
+                    else -> "UPI Payment"
                 }
+
+                Log.i(TAG, "Verified genuine payment inflow: ₹$amount from $appName!")
+
+                // Call the shared SoundboxManager singleton so pre-warmed TTS announces immediately
+                val soundboxManager = PaymentSoundboxManager.getInstance(applicationContext)
+                soundboxManager.announcePayment(
+                    amount = amount,
+                    currencySymbol = "₹",
+                    appName = appName
+                )
+
+                // Notify UI listeners
+                onPaymentReceivedListener?.invoke(amount, fullContent)
+            } else {
+                Log.d(TAG, "Ignored non-payment / promotional notification from [$pkg]: $fullContent")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling payment notification", e)

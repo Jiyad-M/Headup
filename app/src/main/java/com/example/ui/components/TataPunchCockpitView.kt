@@ -1,12 +1,16 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -137,6 +141,31 @@ fun TataPunchCockpitView(
             currentSecond = now.get(Calendar.SECOND)
             delay(1000)
         }
+    }
+
+    // Car Ignition Meter Sweep Animation (Speedo & Clock go full then return back on display on)
+    val animationScope = rememberCoroutineScope()
+    val ignitionSweep = remember { Animatable(0f) }
+
+    fun triggerIgnitionSweep() {
+        animationScope.launch {
+            ignitionSweep.snapTo(0f)
+            // 1. Energetic sweep to 100% max gauge (180 km/h and 360-deg clock ring)
+            ignitionSweep.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 850, easing = FastOutSlowInEasing)
+            )
+            delay(120) // Brief hold at maximum gauge like sports car cluster
+            // 2. Smooth return back to 0 (real live speed and hour)
+            ignitionSweep.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
+    LaunchedEffect(powerState.isPlugged) {
+        triggerIgnitionSweep()
     }
 
     val filteredApps = remember(permittedApps, searchQuery) {
@@ -305,12 +334,14 @@ fun TataPunchCockpitView(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left Panel: SPEEDOMETER (100% Real GPS Hardware)
+                        // Left Panel: SPEEDOMETER (100% Real GPS Hardware + Ignition Gauge Sweep)
                         SpeedometerCockpitCard(
                             speed = gpsSpeed,
                             hasGpsFix = hasGpsFix,
                             gpsStatusText = gpsStatusText,
                             onRequestGpsPermission = onRequestGpsPermission,
+                            ignitionProgress = ignitionSweep.value,
+                            onRetriggerIgnition = { triggerIgnitionSweep() },
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -335,6 +366,8 @@ fun TataPunchCockpitView(
                             amPm = currentAmPm,
                             hour = currentHour,
                             minute = currentMinute,
+                            ignitionProgress = ignitionSweep.value,
+                            onRetriggerIgnition = { triggerIgnitionSweep() },
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -354,6 +387,8 @@ fun TataPunchCockpitView(
                             hasGpsFix = hasGpsFix,
                             gpsStatusText = gpsStatusText,
                             onRequestGpsPermission = onRequestGpsPermission,
+                            ignitionProgress = ignitionSweep.value,
+                            onRetriggerIgnition = { triggerIgnitionSweep() },
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -376,6 +411,8 @@ fun TataPunchCockpitView(
                             amPm = currentAmPm,
                             hour = currentHour,
                             minute = currentMinute,
+                            ignitionProgress = ignitionSweep.value,
+                            onRetriggerIgnition = { triggerIgnitionSweep() },
                             modifier = Modifier
                                 .width(280.dp)
                                 .fillMaxHeight()
@@ -457,7 +494,7 @@ fun TataPunchCockpitView(
 }
 
 // -------------------------------------------------------------
-// PANEL 1: SPEEDOMETER CARD (100% Real Hardware GPS)
+// PANEL 1: SPEEDOMETER CARD (100% Real Hardware GPS + Ignition Sweep)
 // -------------------------------------------------------------
 @Composable
 fun SpeedometerCockpitCard(
@@ -465,8 +502,23 @@ fun SpeedometerCockpitCard(
     hasGpsFix: Boolean = false,
     gpsStatusText: String = "GPS Ready",
     onRequestGpsPermission: () -> Unit = {},
+    ignitionProgress: Float = 0f,
+    onRetriggerIgnition: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isIgnitionSweeping = ignitionProgress > 0.005f
+    val displaySpeed = if (isIgnitionSweeping) {
+        (180f * ignitionProgress).toInt()
+    } else {
+        speed
+    }
+
+    val animatedSpeed by animateFloatAsState(
+        targetValue = displaySpeed.toFloat(),
+        animationSpec = tween(durationMillis = if (isIgnitionSweeping) 40 else 300),
+        label = "speed"
+    )
+
     val cardGradient = Brush.verticalGradient(
         colors = listOf(
             Color(0xFF0F473E), // Upper radiant teal
@@ -476,10 +528,15 @@ fun SpeedometerCockpitCard(
     )
 
     Card(
-        modifier = modifier.testTag("speedometer_card"),
+        modifier = modifier
+            .testTag("speedometer_card")
+            .clickable { onRetriggerIgnition() },
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF1B6B5C).copy(alpha = 0.85f))
+        border = androidx.compose.foundation.BorderStroke(
+            1.5.dp,
+            if (isIgnitionSweeping) CockpitTealGlow else Color(0xFF1B6B5C).copy(alpha = 0.85f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -508,12 +565,6 @@ fun SpeedometerCockpitCard(
                     .padding(6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                val animatedSpeed by animateFloatAsState(
-                    targetValue = speed.toFloat(),
-                    animationSpec = tween(durationMillis = 300),
-                    label = "speed"
-                )
-
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val strokeWidth = 8.dp.toPx()
                     val diameter = size.minDimension - strokeWidth - 6.dp.toPx()
@@ -531,8 +582,13 @@ fun SpeedometerCockpitCard(
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                     )
 
-                    // Active Glowing Speed Arc (0 to 180 km/h)
-                    val sweepProgress = (animatedSpeed / 180f).coerceIn(0.02f, 1f) * 270f
+                    // Active Glowing Speed Arc (Sweeps to 270° on ignition, then returns to live GPS speed)
+                    val sweepProgress = if (isIgnitionSweeping) {
+                        (ignitionProgress * 270f).coerceIn(2f, 270f)
+                    } else {
+                        (animatedSpeed / 180f).coerceIn(0.02f, 1f) * 270f
+                    }
+
                     drawArc(
                         brush = Brush.sweepGradient(
                             listOf(TataPunchJade, CockpitTealGlow, TataPunchMint)
@@ -549,7 +605,7 @@ fun SpeedometerCockpitCard(
                 // Center readout: "65" + "km/h"
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "$speed",
+                        text = "$displaySpeed",
                         style = MaterialTheme.typography.displayMedium.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 44.sp,
@@ -558,12 +614,12 @@ fun SpeedometerCockpitCard(
                         color = Color.White
                     )
                     Text(
-                        text = "km/h",
+                        text = if (isIgnitionSweeping) "SWEEP" else "km/h",
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.Normal,
+                            fontWeight = if (isIgnitionSweeping) FontWeight.Bold else FontWeight.Normal,
                             fontSize = 12.sp
                         ),
-                        color = TataEvTextMuted
+                        color = if (isIgnitionSweeping) TataPunchMint else TataEvTextMuted
                     )
                 }
             }
@@ -756,7 +812,7 @@ fun AllowedAppsCockpitCard(
 }
 
 // -------------------------------------------------------------
-// PANEL 3: DIGITAL CLOCK CARD (Matching Photo 1: 09:20 AM/PM with Illuminated Hour Ring)
+// PANEL 3: DIGITAL CLOCK CARD (Matching Photo 1: 09:20 AM/PM with Illuminated Hour Ring + Ignition Sweep)
 // -------------------------------------------------------------
 @Composable
 fun DigitalClockCockpitCard(
@@ -764,8 +820,21 @@ fun DigitalClockCockpitCard(
     amPm: String,
     hour: Int,
     minute: Int,
+    ignitionProgress: Float = 0f,
+    onRetriggerIgnition: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isIgnitionSweeping = ignitionProgress > 0.005f
+    val hour12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+    val progressFraction = (hour12 % 12 + minute / 60f) / 12f
+
+    // When ignition is active, ring sweeps full 360 degrees then returns smoothly to real hour!
+    val sweepAngle = if (isIgnitionSweeping) {
+        (ignitionProgress * 360f).coerceAtLeast(10f)
+    } else {
+        (progressFraction * 360f).coerceAtLeast(20f)
+    }
+
     val cardGradient = Brush.verticalGradient(
         colors = listOf(
             Color(0xFF0F473E),
@@ -775,10 +844,15 @@ fun DigitalClockCockpitCard(
     )
 
     Card(
-        modifier = modifier.testTag("digital_clock_card"),
+        modifier = modifier
+            .testTag("digital_clock_card")
+            .clickable { onRetriggerIgnition() },
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF1B6B5C).copy(alpha = 0.85f))
+        border = androidx.compose.foundation.BorderStroke(
+            1.5.dp,
+            if (isIgnitionSweeping) CockpitTealGlow else Color(0xFF1B6B5C).copy(alpha = 0.85f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -838,18 +912,18 @@ fun DigitalClockCockpitCard(
                         style = Stroke(width = 1.dp.toPx())
                     )
 
-                    // Active 12-hour progression arc (illuminated green/mint neon)
-                    val hour12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-                    val progressFraction = (hour12 % 12 + minute / 60f) / 12f
-                    val sweepAngle = progressFraction * 360f
-
+                    // Active 12-hour progression arc (Sweeps 360° on ignition, then returns to current hour)
                     drawArc(
                         brush = Brush.sweepGradient(
-                            colors = listOf(TataPunchJade, TataPunchMint, TataPunchJade),
+                            colors = if (isIgnitionSweeping) {
+                                listOf(CockpitTealGlow, TataPunchMint, CockpitTealGlow)
+                            } else {
+                                listOf(TataPunchJade, TataPunchMint, TataPunchJade)
+                            },
                             center = center
                         ),
                         startAngle = -90f,
-                        sweepAngle = sweepAngle.coerceAtLeast(20f),
+                        sweepAngle = sweepAngle,
                         useCenter = false,
                         style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
                     )
@@ -872,7 +946,7 @@ fun DigitalClockCockpitCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = amPm.ifEmpty { "AM/PM" },
+                        text = if (isIgnitionSweeping) "READY" else amPm.ifEmpty { "AM/PM" },
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.SemiBold,
                             letterSpacing = 1.5.sp,
@@ -885,12 +959,12 @@ fun DigitalClockCockpitCard(
 
             // Real-Time Clock Status
             Text(
-                text = "12-Hour Active Digital Clock",
+                text = if (isIgnitionSweeping) "Meter Sweep Check Active" else "12-Hour Active Digital Clock",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold
                 ),
-                color = TataEvTextMuted
+                color = if (isIgnitionSweeping) TataPunchMint else TataEvTextMuted
             )
         }
     }

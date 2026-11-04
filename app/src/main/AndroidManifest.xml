@@ -53,6 +53,8 @@
             android:clearTaskOnLaunch="true"
             android:stateNotNeeded="true"
             android:resizeableActivity="false"
+            android:supportsPictureInPicture="false"
+            android:documentLaunchMode="never"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MyApplication">
             <intent-filter android:priority="1000">

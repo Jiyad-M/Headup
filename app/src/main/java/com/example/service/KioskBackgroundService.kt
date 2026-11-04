@@ -125,7 +125,8 @@ class KioskBackgroundService : Service() {
 
     /**
      * Actively restricts unauthorized app usage when Kiosk is activated:
-     * "App is active, restrict other app use. If activate, deny all access of other blacklist app. Anyway cant open"
+     * Strictly blocks unallowed apps in full-screen, split-screen multi-window,
+     * and Samsung DeX desktop mode.
      */
     private fun startAppRestrictionMonitoring() {
         monitorJob?.cancel()
@@ -133,63 +134,105 @@ class KioskBackgroundService : Service() {
             while (isActive) {
                 try {
                     if (preferences.isActivated) {
-                        val topPackage = getTopRunningPackage()
-                        if (!topPackage.isNullOrEmpty() &&
-                            topPackage != packageName &&
-                            !isSystemEssentialPackage(topPackage)
-                        ) {
-                            if (!appManager.isPackageAllowed(topPackage)) {
-                                Log.w(TAG, "Unauthorized app detected in foreground: $topPackage. Enforcing lockdown...")
-                                bringKioskToFront(topPackage)
-                            }
+                        val blockedPackages = getUnauthorizedActivePackages()
+                        for (blockedPkg in blockedPackages) {
+                            Log.w(TAG, "Unauthorized app detected in multi-window/foreground: $blockedPkg. Enforcing lockdown...")
+                            bringKioskToFront(blockedPkg)
+                            break
                         }
                     }
                 } catch (_: Exception) {}
-                delay(600) // Poll every 600ms
+                delay(200) // Fast 200ms check to prevent split-screen or DeX bypass
             }
         }
     }
 
     private fun isSystemEssentialPackage(pkg: String): Boolean {
-        return pkg.startsWith("com.android.systemui") ||
-                pkg == "android" ||
+        return pkg == "android" ||
+                pkg.startsWith("com.android.systemui") ||
+                pkg.startsWith("com.samsung.android.honeyboard") || // Samsung Keyboard
+                pkg.startsWith("com.google.android.inputmethod") ||  // Gboard
                 pkg.contains("emergency") ||
                 pkg.contains("telecom") ||
                 pkg.contains("incallui")
     }
 
-    private fun getTopRunningPackage(): String? {
+    /**
+     * Finds any unallowed apps currently active in foreground, split-screen panes,
+     * or Samsung DeX freeform floating windows.
+     */
+    private fun getUnauthorizedActivePackages(): List<String> {
+        val blockedList = mutableListOf<String>()
+
+        // 1. Check all visible or foreground processes (catches split-screen & Samsung DeX windows)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-                val time = System.currentTimeMillis()
-                val stats = usageStatsManager?.queryUsageStats(
-                    UsageStatsManager.INTERVAL_DAILY,
-                    time - 1000 * 10,
-                    time
-                )
-                if (!stats.isNullOrEmpty()) {
-                    var recentStat = stats[0]
-                    for (stat in stats) {
-                        if (stat.lastTimeUsed > recentStat.lastTimeUsed) {
-                            recentStat = stat
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            val processes = am?.runningAppProcesses
+            if (processes != null) {
+                for (proc in processes) {
+                    if (proc.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE) {
+                        for (pkg in proc.pkgList) {
+                            if (pkg != packageName &&
+                                !isSystemEssentialPackage(pkg) &&
+                                !appManager.isPackageAllowed(pkg)
+                            ) {
+                                if (!blockedList.contains(pkg)) {
+                                    blockedList.add(pkg)
+                                }
+                            }
                         }
                     }
-                    return recentStat.packageName
                 }
             }
         } catch (_: Exception) {}
 
+        // 2. Check recent UsageEvents (catches instant launches)
         try {
-            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            @Suppress("DEPRECATION")
-            val tasks = am?.getRunningTasks(1)
-            if (!tasks.isNullOrEmpty()) {
-                return tasks[0].topActivity?.packageName
+            val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            val now = System.currentTimeMillis()
+            val events = usageStatsManager?.queryEvents(now - 2500, now)
+            if (events != null) {
+                val event = android.app.usage.UsageEvents.Event()
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(event)
+                    if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                        val pkg = event.packageName
+                        if (!pkg.isNullOrEmpty() &&
+                            pkg != packageName &&
+                            !isSystemEssentialPackage(pkg) &&
+                            !appManager.isPackageAllowed(pkg)
+                        ) {
+                            if (!blockedList.contains(pkg)) {
+                                blockedList.add(pkg)
+                            }
+                        }
+                    }
+                }
             }
         } catch (_: Exception) {}
 
-        return null
+        // 3. Check top running tasks
+        try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            @Suppress("DEPRECATION")
+            val tasks = am?.getRunningTasks(3)
+            if (tasks != null) {
+                for (task in tasks) {
+                    val topPkg = task.topActivity?.packageName
+                    if (!topPkg.isNullOrEmpty() &&
+                        topPkg != packageName &&
+                        !isSystemEssentialPackage(topPkg) &&
+                        !appManager.isPackageAllowed(topPkg)
+                    ) {
+                        if (!blockedList.contains(topPkg)) {
+                            blockedList.add(topPkg)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return blockedList
     }
 
     private fun bringKioskToFront(blockedPkg: String) {

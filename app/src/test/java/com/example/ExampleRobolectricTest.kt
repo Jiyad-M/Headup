@@ -49,6 +49,29 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `test strictly ignore promotional advertisements and debits with currency symbol`() {
+    // Advertisement / marketing notifications that must NEVER be announced
+    val adText1 = "Flat ₹50 cashback on your mobile recharge!"
+    val adText2 = "Special offer! Save ₹100 on your next grocery order with coupon code"
+    val adText3 = "Pre-approved personal loan of ₹5,00,000 at low interest rate"
+    val adText4 = "Earn up to ₹200 scratch card on bill pay"
+    val debitText1 = "₹250.00 debited from your A/C XX1234 for Swiggy"
+    val debitText2 = "Paid to Merchant Store ₹75.00"
+
+    org.junit.Assert.assertNull(PaymentNotificationListenerService.parsePaymentAmount(adText1))
+    org.junit.Assert.assertNull(PaymentNotificationListenerService.parsePaymentAmount(adText2))
+    org.junit.Assert.assertNull(PaymentNotificationListenerService.parsePaymentAmount(adText3))
+    org.junit.Assert.assertNull(PaymentNotificationListenerService.parsePaymentAmount(adText4))
+    org.junit.Assert.assertNull(PaymentNotificationListenerService.parsePaymentAmount(debitText1))
+    org.junit.Assert.assertNull(PaymentNotificationListenerService.parsePaymentAmount(debitText2))
+
+    // Genuine bank credit must be announced
+    val bankCredit = "Your A/C XX9876 is credited with ₹450.00 on 04-Nov-26 by UPI ref 123456"
+    val creditAmt = PaymentNotificationListenerService.parsePaymentAmount(bankCredit)
+    assertEquals(450.0, creditAmt ?: 0.0, 0.01)
+  }
+
+  @Test
   fun `test account activation and preferences`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val prefs = KioskPreferences(context)
