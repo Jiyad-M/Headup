@@ -94,11 +94,11 @@ class KioskPreferences(context: Context) {
         set(value) = prefs.edit().putStringSet(KEY_BLACKLISTED_PACKAGES, value).apply()
 
     var autoDisplayOnPlugged: Boolean
-        get() = prefs.getBoolean(KEY_POWER_AUTO_DISPLAY, true)
+        get() = prefs.getBoolean(KEY_POWER_AUTO_DISPLAY, false)
         set(value) = prefs.edit().putBoolean(KEY_POWER_AUTO_DISPLAY, value).apply()
 
     var sleepOnUnplugged: Boolean
-        get() = prefs.getBoolean(KEY_SLEEP_ON_UNPLUG, true)
+        get() = prefs.getBoolean(KEY_SLEEP_ON_UNPLUG, false)
         set(value) = prefs.edit().putBoolean(KEY_SLEEP_ON_UNPLUG, value).apply()
 
     var currency: String

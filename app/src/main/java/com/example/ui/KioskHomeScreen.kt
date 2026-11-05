@@ -112,6 +112,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val blockedAppAttempt by viewModel.blockedAppAttempt.collectAsStateWithLifecycle()
     val displayWakeTrigger by viewModel.displayWakeTrigger.collectAsStateWithLifecycle()
     val isLightMode by viewModel.isLightMode.collectAsStateWithLifecycle()
+    val isDeviceAdminActive by viewModel.isDeviceAdminActive.collectAsStateWithLifecycle()
+    val canWriteSettings by viewModel.canWriteSettings.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -202,6 +204,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 isNotificationAccessGranted = isNotificationAccessGranted,
                 isDefaultHome = isDefaultHome,
                 hasSmsPermission = hasSmsPermission,
+                isDeviceAdminActive = isDeviceAdminActive,
                 onRequestLocation = {
                     locationPermissionLauncher.launch(
                         arrayOf(
@@ -219,6 +222,9 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 onRequestSms = {
                     smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
                 },
+                onRequestDeviceAdmin = {
+                    viewModel.requestDeviceAdmin()
+                },
                 onRequestAll = {
                     if (!hasLocationPermission) {
                         locationPermissionLauncher.launch(
@@ -233,6 +239,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                         viewModel.promptSetDefaultLauncher(homeRoleLauncher)
                     } else if (!hasSmsPermission) {
                         smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
+                    } else if (!isDeviceAdminActive) {
+                        viewModel.requestDeviceAdmin()
                     }
                 },
                 modifier = Modifier
@@ -247,13 +255,6 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 16.dp)
-        )
-
-        // 6. Power Disconnected -> Complete Screen Light Blackout after 3s countdown (Screen OFF like power button)
-        DisplaySleepOverlay(
-            isCompletelyOff = isDisplayCompletelyOff,
-            countdownSec = unplugCountdown,
-            onWakeDisplay = { viewModel.wakeDisplay() }
         )
 
         // 7. 8-digit PIN Unlock Dialog (Protected Exit, Uninstall, or Admin Settings)
@@ -297,6 +298,10 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 selectedSpeechEngine = speechEngine,
                 isDefaultHome = isDefaultHome,
                 isLightMode = isLightMode,
+                isDeviceAdminActive = isDeviceAdminActive,
+                canWriteSettings = canWriteSettings,
+                onRequestDeviceAdmin = { viewModel.requestDeviceAdmin() },
+                onRequestWriteSettings = { viewModel.requestWriteSettings() },
                 onToggleLightMode = { viewModel.setLightMode(it) },
                 onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },

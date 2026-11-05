@@ -84,6 +84,12 @@ class KioskBackgroundService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "WakeLock acquire error", e)
         }
+
+        try {
+            com.example.power.PowerMonitor.getInstance(applicationContext, preferences).startMonitoring()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start PowerMonitor in background", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

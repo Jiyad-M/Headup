@@ -48,7 +48,7 @@ class KioskViewModel(
     val securityManager = KioskSecurityManager(application, preferences)
     val appManager = AppManager(application, preferences)
     val soundboxManager = PaymentSoundboxManager.getInstance(application, preferences)
-    val powerMonitor = PowerMonitor(activity, preferences)
+    val powerMonitor = PowerMonitor.getInstance(application, preferences)
     val gpsSpeedometer = com.example.speed.GpsSpeedometerManager(application)
 
     private val _isActivated = MutableStateFlow(preferences.isActivated)
@@ -119,6 +119,12 @@ class KioskViewModel(
 
     private val _isNotificationAccessGranted = MutableStateFlow(checkNotificationAccessGranted())
     val isNotificationAccessGranted: StateFlow<Boolean> = _isNotificationAccessGranted.asStateFlow()
+
+    private val _isDeviceAdminActive = MutableStateFlow(PowerMonitor.isDeviceAdminActive(application))
+    val isDeviceAdminActive: StateFlow<Boolean> = _isDeviceAdminActive.asStateFlow()
+
+    private val _canWriteSettings = MutableStateFlow(PowerMonitor.canWriteSystemSettings(application))
+    val canWriteSettings: StateFlow<Boolean> = _canWriteSettings.asStateFlow()
 
     private val _hasAllPermissions = MutableStateFlow(false)
     val hasAllPermissions: StateFlow<Boolean> = _hasAllPermissions.asStateFlow()
@@ -247,11 +253,15 @@ class KioskViewModel(
         val notif = checkNotificationAccessGranted()
         val loc = checkLocationPermissionGranted()
         val sms = checkSmsPermissionGranted()
+        val admin = PowerMonitor.isDeviceAdminActive(activity)
+        val writeSet = PowerMonitor.canWriteSystemSettings(activity)
 
         _isDefaultHome.value = home
         _isNotificationAccessGranted.value = notif
         _hasLocationPermission.value = loc
         _hasSmsPermission.value = sms
+        _isDeviceAdminActive.value = admin
+        _canWriteSettings.value = writeSet
         _hasAllPermissions.value = home && notif && loc && sms
 
         if (loc) {
@@ -563,6 +573,30 @@ class KioskViewModel(
     fun updatePowerSettings(autoDisplayOn: Boolean, sleepOnUnplug: Boolean) {
         preferences.autoDisplayOnPlugged = autoDisplayOn
         preferences.sleepOnUnplugged = sleepOnUnplug
+        if (sleepOnUnplug && !PowerMonitor.isDeviceAdminActive(activity)) {
+            _statusMessage.value = "Device Admin permission needed for instant hardware screen off"
+            requestDeviceAdmin()
+        } else {
+            _statusMessage.value = "Power settings saved"
+        }
+    }
+
+    fun requestDeviceAdmin() {
+        try {
+            val intent = PowerMonitor.createDeviceAdminIntent(activity)
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("KioskViewModel", "Error requesting device admin", e)
+        }
+    }
+
+    fun requestWriteSettings() {
+        try {
+            val intent = PowerMonitor.createWriteSettingsIntent(activity)
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("KioskViewModel", "Error requesting write settings", e)
+        }
     }
 
     fun updateCurrency(newCurrency: String) {

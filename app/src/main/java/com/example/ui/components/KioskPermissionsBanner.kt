@@ -61,14 +61,16 @@ fun KioskPermissionsBanner(
     isNotificationAccessGranted: Boolean,
     isDefaultHome: Boolean,
     hasSmsPermission: Boolean,
+    isDeviceAdminActive: Boolean = true,
     onRequestLocation: () -> Unit,
     onRequestNotificationAccess: () -> Unit,
     onRequestDefaultLauncher: () -> Unit,
     onRequestSms: () -> Unit,
+    onRequestDeviceAdmin: () -> Unit = {},
     onRequestAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val allGranted = hasLocationPermission && isNotificationAccessGranted && isDefaultHome && hasSmsPermission
+    val allGranted = hasLocationPermission && isNotificationAccessGranted && isDefaultHome && hasSmsPermission && isDeviceAdminActive
     var isExpanded by remember { mutableStateOf(!allGranted) }
 
     AnimatedVisibility(
@@ -177,6 +179,15 @@ fun KioskPermissionsBanner(
                         icon = Icons.Default.Sms,
                         onAction = onRequestSms,
                         actionLabel = "Allow SMS"
+                    )
+
+                    PermissionStatusRow(
+                        title = "5. Hardware Screen Off (Device Admin)",
+                        subtitle = "Turns display light completely off when power unplugged in any app",
+                        isGranted = isDeviceAdminActive,
+                        icon = Icons.Default.Security,
+                        onAction = onRequestDeviceAdmin,
+                        actionLabel = "Enable"
                     )
                 }
             }

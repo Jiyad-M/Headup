@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Block
@@ -115,7 +117,11 @@ fun AdminSettingsSheet(
     selectedSpeechEngine: SpeechEngine = SpeechEngine.NATURAL_CLOUD,
     isDefaultHome: Boolean = false,
     isLightMode: Boolean = false,
+    isDeviceAdminActive: Boolean = true,
+    canWriteSettings: Boolean = true,
     onToggleLightMode: (Boolean) -> Unit = {},
+    onRequestDeviceAdmin: () -> Unit = {},
+    onRequestWriteSettings: () -> Unit = {},
     onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onToggleAppBlacklisted: (String, Boolean) -> Unit = { _, _ -> },
@@ -244,6 +250,10 @@ fun AdminSettingsSheet(
                         2 -> PowerSettingsTab(
                             autoDisplayOnPlugged = autoDisplayOnPlugged,
                             sleepOnUnplugged = sleepOnUnplugged,
+                            isDeviceAdminActive = isDeviceAdminActive,
+                            canWriteSettings = canWriteSettings,
+                            onRequestDeviceAdmin = onRequestDeviceAdmin,
+                            onRequestWriteSettings = onRequestWriteSettings,
                             onUpdatePowerSettings = onUpdatePowerSettings
                         )
                         3 -> SecurityAndExitTab(
@@ -708,22 +718,28 @@ fun AppWhitelistRow(
 fun PowerSettingsTab(
     autoDisplayOnPlugged: Boolean,
     sleepOnUnplugged: Boolean,
+    isDeviceAdminActive: Boolean = true,
+    canWriteSettings: Boolean = true,
+    onRequestDeviceAdmin: () -> Unit = {},
+    onRequestWriteSettings: () -> Unit = {},
     onUpdatePowerSettings: (Boolean, Boolean) -> Unit
 ) {
     var displayOn by remember { mutableStateOf(autoDisplayOnPlugged) }
     var sleepOn by remember { mutableStateOf(sleepOnUnplugged) }
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Power & Screen Behavior",
+            text = "Hardware Power & Display Behavior",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = Color.White
         )
         Text(
-            text = "Automate display power states based on charging cable connection.",
+            text = "Controls physical hardware display power when charging cable is connected or disconnected. Default is OFF.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -735,6 +751,7 @@ fun PowerSettingsTab(
             border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Plugged in
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -742,12 +759,12 @@ fun PowerSettingsTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Power Plugged -> Display ON",
+                            text = "Plugged In -> Display Completely ON",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = Color.White
                         )
                         Text(
-                            text = "Keep screen permanently on when connected to AC or USB charger.",
+                            text = "Instantly wakes screen when charger plugged. Zero display sleep (keeps screen on permanently).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -764,6 +781,7 @@ fun PowerSettingsTab(
 
                 HorizontalDivider(color = CockpitBorder)
 
+                // Unplugged
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -771,12 +789,12 @@ fun PowerSettingsTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Power Goes -> Display Sleep",
+                            text = "Unplugged -> Complete Hardware Display OFF",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = Color.White
                         )
                         Text(
-                            text = "Instantly sleep display when power cable is unplugged to preserve battery.",
+                            text = "Within 3 seconds of unplugging, turns display and lights completely OFF in ANY app (Uber, Maps, etc.).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -789,6 +807,100 @@ fun PowerSettingsTab(
                         },
                         colors = SwitchDefaults.colors(checkedTrackColor = AmberGold)
                     )
+                }
+            }
+        }
+
+        // Hardware Permissions Section
+        Text(
+            text = "Required Permissions for Hardware Display Control",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = Color.White
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = CockpitCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // 1. Device Admin
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Device Administrator",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color.White
+                            )
+                            if (isDeviceAdminActive) {
+                                Text(
+                                    text = "ACTIVE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 10.sp),
+                                    color = EmeraldGreen
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Allows Kiosk to turn off physical screen lights system-wide when power is cut (lockNow).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (!isDeviceAdminActive) {
+                        Button(
+                            onClick = onRequestDeviceAdmin,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AmberGold, contentColor = Color.Black)
+                        ) {
+                            Text("Grant", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = CockpitBorder)
+
+                // 2. Write System Settings
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Modify System Settings",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color.White
+                            )
+                            if (canWriteSettings) {
+                                Text(
+                                    text = "ACTIVE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 10.sp),
+                                    color = EmeraldGreen
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Sets Android display timeout to 24 hours while plugged so screen never sleeps.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (!canWriteSettings) {
+                        Button(
+                            onClick = onRequestWriteSettings,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AmberGold, contentColor = Color.Black)
+                        ) {
+                            Text("Allow", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
