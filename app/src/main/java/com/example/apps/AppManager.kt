@@ -160,8 +160,9 @@ class AppManager(
         return try {
             val intent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                 context.startActivity(intent)
+                preferences.lastOpenedPackage = packageName
                 true
             } else false
         } catch (e: Exception) {
@@ -177,8 +178,9 @@ class AppManager(
         return try {
             val intent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                 context.startActivity(intent)
+                preferences.lastOpenedPackage = packageName
                 true
             } else {
                 Log.w("AppManager", "No launch intent found for $packageName")

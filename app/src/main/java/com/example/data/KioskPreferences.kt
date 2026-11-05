@@ -27,6 +27,7 @@ class KioskPreferences(context: Context) {
         private const val KEY_SOUNDBOX_TONE = "kiosk_soundbox_tone"
         private const val KEY_SPEECH_ENGINE = "kiosk_speech_engine"
         private const val KEY_IS_LIGHT_MODE = "kiosk_is_light_mode"
+        private const val KEY_LAST_OPENED_PACKAGE = "kiosk_last_opened_package"
 
         // Account Activation & Recovery Keys
         private const val KEY_IS_ACTIVATED = "kiosk_is_activated"
@@ -136,6 +137,10 @@ class KioskPreferences(context: Context) {
     var isLightMode: Boolean
         get() = prefs.getBoolean(KEY_IS_LIGHT_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_IS_LIGHT_MODE, value).apply()
+
+    var lastOpenedPackage: String
+        get() = prefs.getString(KEY_LAST_OPENED_PACKAGE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_LAST_OPENED_PACKAGE, value).apply()
 
     fun getPaymentHistory(): List<PaymentRecord> {
         val json = prefs.getString(KEY_PAYMENT_HISTORY, null) ?: return emptyList()

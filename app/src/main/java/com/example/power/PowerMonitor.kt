@@ -185,8 +185,13 @@ class PowerMonitor private constructor(
         powerOffJob?.cancel()
     }
 
+    private val _powerPlugSweepTrigger = MutableStateFlow(0L)
+    val powerPlugSweepTrigger: StateFlow<Long> = _powerPlugSweepTrigger.asStateFlow()
+
     /**
      * Power plugged: Display ON permanently, screen bright, zero sleep.
+     * Restores the previous app that was last open (Uber, Google Maps, etc.)
+     * and triggers the car ignition gauge sweep animation on the display.
      */
     fun handlePowerConnected() {
         powerOffJob?.cancel()
@@ -194,10 +199,20 @@ class PowerMonitor private constructor(
         _unplugCountdown.value = null
         _isDisplayCompletelyOff.value = false
 
+        // Always wake the hardware display when plugged in
+        wakeDevice()
+
         if (preferences.autoDisplayOnPlugged) {
-            wakeDevice()
             applyNoSleepScreenTimeout()
+        } else {
+            restoreNormalScreenTimeout()
         }
+
+        // Restore the last opened app (Uber, Maps, etc.) so user returns right to where they were!
+        restoreLastOpenedApp()
+
+        // Trigger gauge sweep on display on from charger plug
+        _powerPlugSweepTrigger.value = System.currentTimeMillis()
     }
 
     /**
@@ -272,6 +287,35 @@ class PowerMonitor private constructor(
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed setting no-sleep timeout", e)
+            }
+        }
+    }
+
+    private fun restoreNormalScreenTimeout() {
+        if (canWriteSystemSettings(context)) {
+            try {
+                Settings.System.putInt(
+                    context.contentResolver,
+                    Settings.System.SCREEN_OFF_TIMEOUT,
+                    60000 // Standard 1 minute timeout
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun restoreLastOpenedApp() {
+        val lastPkg = preferences.lastOpenedPackage
+        if (lastPkg.isNotBlank() && lastPkg != context.packageName) {
+            try {
+                val intent = context.packageManager.getLaunchIntentForPackage(lastPkg)?.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+                if (intent != null) {
+                    context.startActivity(intent)
+                    Log.i(TAG, "Restored last opened app on power connect: $lastPkg")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore last opened app $lastPkg", e)
             }
         }
     }

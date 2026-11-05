@@ -142,6 +142,7 @@ class KioskViewModel(
     val isLightMode: StateFlow<Boolean> = _isLightMode.asStateFlow()
 
     val powerState: StateFlow<PowerState> = powerMonitor.powerState
+    val powerPlugSweepTrigger: StateFlow<Long> = powerMonitor.powerPlugSweepTrigger
     val isDisplayCompletelyOff: StateFlow<Boolean> = powerMonitor.isDisplayCompletelyOff
     val unplugCountdown: StateFlow<Int?> = powerMonitor.unplugCountdown
     val isAnnouncingPayment: StateFlow<Boolean> = soundboxManager.isAnnouncing
@@ -391,9 +392,10 @@ class KioskViewModel(
         if (!appManager.isPackageAllowed(pkg)) {
             pendingUnlockPackage = pkg
             _blockedAppAttempt.value = pkg
-            _statusMessage.value = "ACCESS PROTECTED: $pkg requires 8-digit password to open."
+            openPinDialog(PinPurpose.UNLOCK_BLOCKED_APP)
             return
         }
+        preferences.lastOpenedPackage = pkg
         val success = appManager.launchApp(pkg)
         if (!success) {
             _statusMessage.value = "Unable to launch $pkg"
@@ -408,7 +410,7 @@ class KioskViewModel(
     fun notifyAppBlocked(pkg: String) {
         pendingUnlockPackage = pkg
         _blockedAppAttempt.value = pkg
-        _statusMessage.value = "ACCESS PROTECTED: $pkg requires 8-digit password to open."
+        openPinDialog(PinPurpose.UNLOCK_BLOCKED_APP)
     }
 
     fun toggleAppBlacklisted(pkg: String, isBlacklisted: Boolean) {
@@ -465,8 +467,9 @@ class KioskViewModel(
                     pendingUnlockPackage = null
                     _blockedAppAttempt.value = null
                     if (pkgToUnlock != null) {
-                        _statusMessage.value = "Password Verified. Unlocking $pkgToUnlock..."
+                        _statusMessage.value = "Password verified. Opening application..."
                         appManager.authorizeTemporarily(pkgToUnlock)
+                        preferences.lastOpenedPackage = pkgToUnlock
                         appManager.launchAppDirectly(pkgToUnlock)
                     }
                 }

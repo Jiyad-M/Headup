@@ -114,6 +114,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val isLightMode by viewModel.isLightMode.collectAsStateWithLifecycle()
     val isDeviceAdminActive by viewModel.isDeviceAdminActive.collectAsStateWithLifecycle()
     val canWriteSettings by viewModel.canWriteSettings.collectAsStateWithLifecycle()
+    val powerPlugSweepTrigger by viewModel.powerPlugSweepTrigger.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -179,6 +180,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
             onOpenSettings = { viewModel.openPinDialog(PinPurpose.ADMIN_ACCESS) },
             onQuickChimeTest = { amount -> viewModel.announcePayment(amount.toDouble()) },
             displayWakeTrigger = displayWakeTrigger,
+            powerPlugSweepTrigger = powerPlugSweepTrigger,
+            allInstalledApps = allInstalledApps,
             isLightMode = isLightMode,
             onRequestGpsPermission = {
                 locationPermissionLauncher.launch(
@@ -326,67 +329,6 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                     viewModel.requestUninstallKiosk()
                 },
                 onClose = { viewModel.closeAdminSettings() }
-            )
-        }
-
-        // 10. Password Protection Dialog when user attempts to open a blocked/blacklisted app
-        if (blockedAppAttempt != null) {
-            AlertDialog(
-                onDismissRequest = { viewModel.dismissBlockedDialog() },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = AmberGold,
-                        modifier = Modifier.size(36.dp)
-                    )
-                },
-                title = {
-                    Text(
-                        text = "PROTECTED APPLICATION",
-                        fontWeight = FontWeight.ExtraBold,
-                        color = AmberGold
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "The application '$blockedAppAttempt' is protected by Kiosk Mode.",
-                            color = Color.White
-                        )
-                        Text(
-                            text = "To authorize and launch this application, enter your 8-digit admin password.",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            viewModel.openPinDialog(PinPurpose.UNLOCK_BLOCKED_APP)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = AmberGold)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Unlock with Password", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { viewModel.dismissBlockedDialog() }
-                    ) {
-                        Text("Dismiss", color = Color.White.copy(alpha = 0.7f))
-                    }
-                },
-                containerColor = Slate900,
-                shape = RoundedCornerShape(16.dp)
             )
         }
     }

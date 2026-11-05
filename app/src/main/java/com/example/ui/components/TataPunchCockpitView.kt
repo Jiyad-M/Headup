@@ -113,6 +113,8 @@ fun TataPunchCockpitView(
     onQuickChimeTest: (Int) -> Unit,
     onRequestGpsPermission: () -> Unit = {},
     displayWakeTrigger: Long = 0L,
+    powerPlugSweepTrigger: Long = 0L,
+    allInstalledApps: List<AppItem> = emptyList(),
     isLightMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -145,20 +147,18 @@ fun TataPunchCockpitView(
         }
     }
 
-    // Car Ignition Meter Sweep Animation (Speedo & Clock go full then return back on display on)
+    // Car Ignition Meter Sweep Animation (Speedo & Clock go full then return back on display on from charger plug)
     val animationScope = rememberCoroutineScope()
     val ignitionSweep = remember { Animatable(0f) }
 
     fun triggerIgnitionSweep() {
         animationScope.launch {
             ignitionSweep.snapTo(0f)
-            // 1. Standard automotive deliberate sweep to 100% max gauge (180 km/h and 360-deg clock ring)
             ignitionSweep.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(durationMillis = 1350, easing = FastOutSlowInEasing)
             )
             delay(280) // Standard automotive pause at peak redline
-            // 2. Smooth, graceful return back to live readings (real speed & live hour)
             ignitionSweep.animateTo(
                 targetValue = 0f,
                 animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing)
@@ -166,20 +166,28 @@ fun TataPunchCockpitView(
         }
     }
 
-    // Trigger gauge sweep every single time the display turns ON (on resume, wake from sleep, charger plug)
-    LaunchedEffect(displayWakeTrigger) {
-        if (displayWakeTrigger > 0L) {
+    // Restrict gauge sweep strictly to when power cable is plugged into the tablet and screen turns on
+    var wasPlugged by remember { mutableStateOf(powerState.isPlugged) }
+    LaunchedEffect(powerState.isPlugged) {
+        if (powerState.isPlugged && !wasPlugged) {
+            triggerIgnitionSweep()
+        }
+        wasPlugged = powerState.isPlugged
+    }
+
+    LaunchedEffect(powerPlugSweepTrigger) {
+        if (powerPlugSweepTrigger > 0L) {
             triggerIgnitionSweep()
         }
     }
 
-    LaunchedEffect(powerState.isPlugged) {
-        triggerIgnitionSweep()
-    }
-
-    val filteredApps = remember(permittedApps, searchQuery) {
-        if (searchQuery.isBlank()) permittedApps
-        else permittedApps.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    val filteredApps = remember(permittedApps, allInstalledApps, searchQuery) {
+        if (searchQuery.isBlank()) {
+            permittedApps
+        } else {
+            val source = if (allInstalledApps.isNotEmpty()) allInstalledApps else permittedApps
+            source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
     }
 
     // Cockpit Gradient: Luminous dark teal in Dark Mode, Crisp automotive frost/silver teal in Light Mode
@@ -364,7 +372,7 @@ fun TataPunchCockpitView(
                             gpsStatusText = gpsStatusText,
                             onRequestGpsPermission = onRequestGpsPermission,
                             ignitionProgress = ignitionSweep.value,
-                            onRetriggerIgnition = { triggerIgnitionSweep() },
+                            onRetriggerIgnition = {},
                             isLightMode = isLightMode,
                             modifier = Modifier
                                 .weight(1f)
@@ -392,7 +400,7 @@ fun TataPunchCockpitView(
                             hour = currentHour,
                             minute = currentMinute,
                             ignitionProgress = ignitionSweep.value,
-                            onRetriggerIgnition = { triggerIgnitionSweep() },
+                            onRetriggerIgnition = {},
                             isLightMode = isLightMode,
                             modifier = Modifier
                                 .weight(1f)
@@ -414,7 +422,7 @@ fun TataPunchCockpitView(
                             gpsStatusText = gpsStatusText,
                             onRequestGpsPermission = onRequestGpsPermission,
                             ignitionProgress = ignitionSweep.value,
-                            onRetriggerIgnition = { triggerIgnitionSweep() },
+                            onRetriggerIgnition = {},
                             isLightMode = isLightMode,
                             modifier = Modifier
                                 .width(280.dp)
@@ -440,7 +448,7 @@ fun TataPunchCockpitView(
                             hour = currentHour,
                             minute = currentMinute,
                             ignitionProgress = ignitionSweep.value,
-                            onRetriggerIgnition = { triggerIgnitionSweep() },
+                            onRetriggerIgnition = {},
                             isLightMode = isLightMode,
                             modifier = Modifier
                                 .width(280.dp)
@@ -591,8 +599,7 @@ fun SpeedometerCockpitCard(
 
     Card(
         modifier = modifier
-            .testTag("speedometer_card")
-            .clickable { onRetriggerIgnition() },
+            .testTag("speedometer_card"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor)
@@ -806,6 +813,7 @@ fun AllowedAppsCockpitCard(
                                 name = app.name,
                                 iconRes = null,
                                 iconBitmap = bitmap,
+                                isBlocked = !app.isAllowed || app.isBlacklisted,
                                 textColor = appTextColor,
                                 isLightMode = isLightMode,
                                 onClick = { onAppClick(app.packageName) }
@@ -969,8 +977,7 @@ fun DigitalClockCockpitCard(
 
     Card(
         modifier = modifier
-            .testTag("digital_clock_card")
-            .clickable { onRetriggerIgnition() },
+            .testTag("digital_clock_card"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         border = androidx.compose.foundation.BorderStroke(1.5.dp, cardBorderColor)
@@ -1093,6 +1100,7 @@ fun AppIconItemView(
     name: String,
     iconRes: Int?,
     iconBitmap: androidx.compose.ui.graphics.ImageBitmap?,
+    isBlocked: Boolean = false,
     textColor: Color = Color.White,
     isLightMode: Boolean = false,
     onClick: () -> Unit
@@ -1114,7 +1122,13 @@ fun AppIconItemView(
                 listOf(Color(0xFF145246), Color(0xFF092922))
             )
         }
-        val iconBoxBorder = if (isLightMode) Color(0xFF7CB8AB).copy(alpha = 0.8f) else Color(0xFF1D6F60).copy(alpha = 0.6f)
+        val iconBoxBorder = if (isBlocked) {
+            Color(0xFFFFB300)
+        } else if (isLightMode) {
+            Color(0xFF7CB8AB).copy(alpha = 0.8f)
+        } else {
+            Color(0xFF1D6F60).copy(alpha = 0.6f)
+        }
 
         Box(
             modifier = Modifier
@@ -1137,6 +1151,25 @@ fun AppIconItemView(
                     tint = if (isLightMode) Color(0xFF00796B) else TataPunchMint,
                     modifier = Modifier.size(24.dp)
                 )
+            }
+
+            if (isBlocked) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(2.dp)
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFB300)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Password Protected",
+                        tint = Color.Black,
+                        modifier = Modifier.size(9.dp)
+                    )
+                }
             }
         }
 
