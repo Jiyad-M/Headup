@@ -120,6 +120,12 @@ class KioskViewModel(
     private val _isNotificationAccessGranted = MutableStateFlow(checkNotificationAccessGranted())
     val isNotificationAccessGranted: StateFlow<Boolean> = _isNotificationAccessGranted.asStateFlow()
 
+    private val _isAccessibilityEnabled = MutableStateFlow(com.example.service.KioskAppLockAccessibilityService.isAccessibilityEnabled(application))
+    val isAccessibilityEnabled: StateFlow<Boolean> = _isAccessibilityEnabled.asStateFlow()
+
+    private val _canDrawOverlays = MutableStateFlow(Settings.canDrawOverlays(application))
+    val canDrawOverlays: StateFlow<Boolean> = _canDrawOverlays.asStateFlow()
+
     private val _isDeviceAdminActive = MutableStateFlow(PowerMonitor.isDeviceAdminActive(application))
     val isDeviceAdminActive: StateFlow<Boolean> = _isDeviceAdminActive.asStateFlow()
 
@@ -256,6 +262,8 @@ class KioskViewModel(
         val sms = checkSmsPermissionGranted()
         val admin = PowerMonitor.isDeviceAdminActive(activity)
         val writeSet = PowerMonitor.canWriteSystemSettings(activity)
+        val access = com.example.service.KioskAppLockAccessibilityService.isAccessibilityEnabled(activity)
+        val overlays = Settings.canDrawOverlays(activity)
 
         _isDefaultHome.value = home
         _isNotificationAccessGranted.value = notif
@@ -263,10 +271,34 @@ class KioskViewModel(
         _hasSmsPermission.value = sms
         _isDeviceAdminActive.value = admin
         _canWriteSettings.value = writeSet
-        _hasAllPermissions.value = home && notif && loc && sms
+        _isAccessibilityEnabled.value = access
+        _canDrawOverlays.value = overlays
+        _hasAllPermissions.value = home && notif && loc && sms && access
 
         if (loc) {
             gpsSpeedometer.startTracking()
+        }
+    }
+
+    fun openAccessibilitySettings() {
+        com.example.service.KioskAppLockAccessibilityService.openAccessibilitySettings(activity)
+    }
+
+    fun openOverlaySettings() {
+        try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${activity.packageName}")
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                activity.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                })
+            } catch (_: Exception) {}
         }
     }
 

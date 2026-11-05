@@ -122,9 +122,11 @@ fun AdminSettingsSheet(
     isLightMode: Boolean = false,
     isDeviceAdminActive: Boolean = true,
     canWriteSettings: Boolean = true,
+    isAccessibilityEnabled: Boolean = false,
     onToggleLightMode: (Boolean) -> Unit = {},
     onRequestDeviceAdmin: () -> Unit = {},
     onRequestWriteSettings: () -> Unit = {},
+    onOpenAccessibilitySettings: () -> Unit = {},
     onThemeChange: (AutomotiveBrandTheme) -> Unit,
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onToggleAppBlacklisted: (String, Boolean) -> Unit = { _, _ -> },
@@ -262,6 +264,8 @@ fun AdminSettingsSheet(
                         3 -> SecurityAndExitTab(
                             currentSecondaryPhone = currentSecondaryPhone,
                             isDefaultHome = isDefaultHome,
+                            isAccessibilityEnabled = isAccessibilityEnabled,
+                            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                             onPromptSetDefaultLauncher = onPromptSetDefaultLauncher,
                             onUpdatePin = onUpdatePin,
                             onUpdateSecondaryPhone = onUpdateSecondaryPhone,
@@ -551,7 +555,7 @@ fun AllowedAppsTab(
             color = Color.White
         )
         Text(
-            text = "Toggle ON for free launch. If toggle is OFF, the app is automatically blocked and strictly password-protected with your 8-digit PIN.",
+            text = "Toggle ON for free launch. If toggle is OFF, the app is automatically blocked and strictly password-protected system-wide across full screen, split-screen, Samsung DeX, multitasking, and links from other apps.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -984,6 +988,8 @@ fun PowerSettingsTab(
 fun SecurityAndExitTab(
     currentSecondaryPhone: String,
     isDefaultHome: Boolean = false,
+    isAccessibilityEnabled: Boolean = false,
+    onOpenAccessibilitySettings: () -> Unit = {},
     onPromptSetDefaultLauncher: () -> Unit = {},
     onUpdatePin: (String) -> Boolean,
     onUpdateSecondaryPhone: (String) -> Unit,
@@ -1056,6 +1062,62 @@ fun SecurityAndExitTab(
                     ) {
                         Text(
                             text = if (isDefaultHome) "Re-verify Default Home Role" else "Set as Default Home Launcher Now",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // System-Wide App Lock (Split-Screen & Multi-Window Protection) Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isAccessibilityEnabled) EmeraldGreen.copy(alpha = 0.6f) else AmberGold
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = if (isAccessibilityEnabled) EmeraldGreen else AmberGold
+                        )
+                        Text(
+                            text = "System-Wide App Lock (Split-Screen Protection)",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = if (isAccessibilityEnabled) {
+                            "✅ Real-Time App Lock Service is ACTIVE. Blocked apps cannot be opened anywhere (including split-screen, Samsung DeX, pop-up view, or intent links from other apps) without the 8-digit password."
+                        } else {
+                            "⚠️ System-Wide App Lock requires Accessibility permission to intercept blocked apps when launched in split-screen or from other apps. Tap below to enable Kiosk App Lock Service in Android Settings."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isAccessibilityEnabled) EmeraldGreen else AmberGold
+                    )
+
+                    Button(
+                        onClick = onOpenAccessibilitySettings,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isAccessibilityEnabled) CockpitSurface else AmberGold,
+                            contentColor = if (isAccessibilityEnabled) HudCyan else CockpitBlack
+                        )
+                    ) {
+                        Text(
+                            text = if (isAccessibilityEnabled) "Accessibility Service Active (Tap to Configure)" else "Enable System-Wide App Lock in Settings",
                             fontWeight = FontWeight.Bold
                         )
                     }

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Kiosk Launcher</string>
+    <string name="accessibility_service_description">Monitors foreground application launches across full screen, split-screen, and multi-window to enforce 8-digit password protection on blocked apps.</string>
 </resources>

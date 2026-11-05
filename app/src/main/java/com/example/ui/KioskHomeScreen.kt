@@ -114,6 +114,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val isLightMode by viewModel.isLightMode.collectAsStateWithLifecycle()
     val isDeviceAdminActive by viewModel.isDeviceAdminActive.collectAsStateWithLifecycle()
     val canWriteSettings by viewModel.canWriteSettings.collectAsStateWithLifecycle()
+    val isAccessibilityEnabled by viewModel.isAccessibilityEnabled.collectAsStateWithLifecycle()
     val powerPlugSweepTrigger by viewModel.powerPlugSweepTrigger.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -208,6 +209,7 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 isDefaultHome = isDefaultHome,
                 hasSmsPermission = hasSmsPermission,
                 isDeviceAdminActive = isDeviceAdminActive,
+                isAccessibilityEnabled = isAccessibilityEnabled,
                 onRequestLocation = {
                     locationPermissionLauncher.launch(
                         arrayOf(
@@ -228,6 +230,9 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 onRequestDeviceAdmin = {
                     viewModel.requestDeviceAdmin()
                 },
+                onRequestAccessibility = {
+                    viewModel.openAccessibilitySettings()
+                },
                 onRequestAll = {
                     if (!hasLocationPermission) {
                         locationPermissionLauncher.launch(
@@ -244,6 +249,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                         smsPermissionLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
                     } else if (!isDeviceAdminActive) {
                         viewModel.requestDeviceAdmin()
+                    } else if (!isAccessibilityEnabled) {
+                        viewModel.openAccessibilitySettings()
                     }
                 },
                 modifier = Modifier
@@ -303,8 +310,10 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 isLightMode = isLightMode,
                 isDeviceAdminActive = isDeviceAdminActive,
                 canWriteSettings = canWriteSettings,
+                isAccessibilityEnabled = isAccessibilityEnabled,
                 onRequestDeviceAdmin = { viewModel.requestDeviceAdmin() },
                 onRequestWriteSettings = { viewModel.requestWriteSettings() },
+                onOpenAccessibilitySettings = { viewModel.openAccessibilitySettings() },
                 onToggleLightMode = { viewModel.setLightMode(it) },
                 onThemeChange = { viewModel.setHudTheme(it) },
                 onToggleAppAllowed = { pkg, allowed -> viewModel.toggleAppAllowed(pkg, allowed) },

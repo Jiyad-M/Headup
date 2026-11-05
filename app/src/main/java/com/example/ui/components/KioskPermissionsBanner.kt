@@ -62,15 +62,17 @@ fun KioskPermissionsBanner(
     isDefaultHome: Boolean,
     hasSmsPermission: Boolean,
     isDeviceAdminActive: Boolean = true,
+    isAccessibilityEnabled: Boolean = false,
     onRequestLocation: () -> Unit,
     onRequestNotificationAccess: () -> Unit,
     onRequestDefaultLauncher: () -> Unit,
     onRequestSms: () -> Unit,
     onRequestDeviceAdmin: () -> Unit = {},
+    onRequestAccessibility: () -> Unit = {},
     onRequestAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val allGranted = hasLocationPermission && isNotificationAccessGranted && isDefaultHome && hasSmsPermission && isDeviceAdminActive
+    val allGranted = hasLocationPermission && isNotificationAccessGranted && isDefaultHome && hasSmsPermission && isDeviceAdminActive && isAccessibilityEnabled
     var isExpanded by remember { mutableStateOf(!allGranted) }
 
     AnimatedVisibility(
@@ -187,6 +189,15 @@ fun KioskPermissionsBanner(
                         isGranted = isDeviceAdminActive,
                         icon = Icons.Default.Security,
                         onAction = onRequestDeviceAdmin,
+                        actionLabel = "Enable"
+                    )
+
+                    PermissionStatusRow(
+                        title = "6. System-Wide App Lock (Split-Screen & Multi-Window)",
+                        subtitle = "Locks unapproved apps with 8-digit PIN across split-screen, DeX & system intents",
+                        isGranted = isAccessibilityEnabled,
+                        icon = Icons.Default.Security,
+                        onAction = onRequestAccessibility,
                         actionLabel = "Enable"
                     )
                 }

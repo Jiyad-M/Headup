@@ -90,6 +90,74 @@ class KioskBackgroundService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start PowerMonitor in background", e)
         }
+
+        try {
+            startAppLockWatchdog()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start AppLockWatchdog", e)
+        }
+    }
+
+    private fun startAppLockWatchdog() {
+        monitorJob?.cancel()
+        monitorJob = serviceScope.launch {
+            val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            var lastDetectedPkg: String? = null
+            var lastDetectionTime: Long = 0L
+
+            while (isActive) {
+                try {
+                    delay(350)
+                    if (!preferences.isActivated) continue
+
+                    // If AccessibilityService is already actively intercepting with 0ms latency, skip polling
+                    if (KioskAppLockAccessibilityService.isServiceRunning) continue
+
+                    if (usageStatsManager != null) {
+                        val endTime = System.currentTimeMillis()
+                        val startTime = endTime - 1000L
+                        val events = usageStatsManager.queryEvents(startTime, endTime)
+                        val event = android.app.usage.UsageEvents.Event()
+                        var foregroundPkg: String? = null
+
+                        while (events.hasNextEvent()) {
+                            events.getNextEvent(event)
+                            if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                                foregroundPkg = event.packageName
+                            }
+                        }
+
+                        if (foregroundPkg != null &&
+                            foregroundPkg != packageName &&
+                            foregroundPkg != "com.android.systemui" &&
+                            !foregroundPkg.startsWith("com.android.inputmethod") &&
+                            !foregroundPkg.startsWith("com.google.android.inputmethod") &&
+                            !foregroundPkg.startsWith("com.samsung.android.honeyboard")
+                        ) {
+                            if (!appManager.isPackageAllowed(foregroundPkg)) {
+                                val now = System.currentTimeMillis()
+                                if (foregroundPkg != lastDetectedPkg || (now - lastDetectionTime) > 1000L) {
+                                    lastDetectedPkg = foregroundPkg
+                                    lastDetectionTime = now
+
+                                    val lockIntent = Intent(applicationContext, com.example.ui.AppLockOverlayActivity::class.java).apply {
+                                        putExtra(com.example.ui.AppLockOverlayActivity.EXTRA_LOCKED_PACKAGE, foregroundPkg)
+                                        addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                                        )
+                                    }
+                                    startActivity(lockIntent)
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
