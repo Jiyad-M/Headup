@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         unlockAndTurnScreenOn()
+        viewModel.appManager.clearTemporaryAuthorizations()
         viewModel.refreshDefaultHomeState()
         viewModel.refreshApps()
         viewModel.loadPaymentHistory()

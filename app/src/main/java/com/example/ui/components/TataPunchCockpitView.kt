@@ -381,7 +381,9 @@ fun TataPunchCockpitView(
 
                         // Center Panel: ALLOWED APPS + Climate controls
                         AllowedAppsCockpitCard(
-                            apps = filteredApps,
+                            permittedApps = permittedApps,
+                            allInstalledApps = allInstalledApps,
+                            searchQuery = searchQuery,
                             isAcActive = isAcActive,
                             isAutoActive = isAutoActive,
                             onToggleAc = { isAcActive = !isAcActive },
@@ -430,7 +432,9 @@ fun TataPunchCockpitView(
                         )
 
                         AllowedAppsCockpitCard(
-                            apps = filteredApps,
+                            permittedApps = permittedApps,
+                            allInstalledApps = allInstalledApps,
+                            searchQuery = searchQuery,
                             isAcActive = isAcActive,
                             isAutoActive = isAutoActive,
                             onToggleAc = { isAcActive = !isAcActive },
@@ -718,7 +722,9 @@ fun SpeedometerCockpitCard(
 // -------------------------------------------------------------
 @Composable
 fun AllowedAppsCockpitCard(
-    apps: List<AppItem>,
+    permittedApps: List<AppItem>,
+    allInstalledApps: List<AppItem> = emptyList(),
+    searchQuery: String = "",
     isAcActive: Boolean,
     isAutoActive: Boolean,
     onToggleAc: () -> Unit,
@@ -727,6 +733,29 @@ fun AllowedAppsCockpitCard(
     isLightMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    var selectedCategory by remember { mutableIntStateOf(0) } // 0 = Allowed, 1 = Not Allowed (Password Protected), 2 = All
+
+    val notAllowedApps = remember(allInstalledApps, permittedApps) {
+        if (allInstalledApps.isNotEmpty()) {
+            allInstalledApps.filter { !it.isAllowed || it.isBlacklisted }
+        } else {
+            emptyList()
+        }
+    }
+
+    val displayApps = remember(selectedCategory, permittedApps, notAllowedApps, allInstalledApps, searchQuery) {
+        val baseList = when (selectedCategory) {
+            0 -> permittedApps
+            1 -> notAllowedApps
+            else -> if (allInstalledApps.isNotEmpty()) allInstalledApps else permittedApps
+        }
+        if (searchQuery.isBlank()) {
+            baseList
+        } else {
+            baseList.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
     val cardGradient = if (isLightMode) {
         Brush.verticalGradient(
             colors = listOf(
@@ -746,7 +775,6 @@ fun AllowedAppsCockpitCard(
     }
 
     val cardBorderColor = if (isLightMode) Color(0xFF7CB8AB) else Color(0xFF1B6B5C).copy(alpha = 0.85f)
-    val headerTextColor = if (isLightMode) Color(0xFF144137) else TataEvTextLight.copy(alpha = 0.9f)
     val appTextColor = if (isLightMode) Color(0xFF0D2822) else Color.White
     val controlActiveColor = if (isLightMode) Color(0xFF0D2822) else Color.White
     val controlInactiveColor = if (isLightMode) Color(0xFF6B8E86) else TataEvTextMuted
@@ -762,20 +790,121 @@ fun AllowedAppsCockpitCard(
             modifier = Modifier
                 .fillMaxSize()
                 .background(cardGradient)
-                .padding(vertical = 14.dp, horizontal = 12.dp),
+                .padding(vertical = 12.dp, horizontal = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header: ALLOWED APPS
-            Text(
-                text = "ALLOWED APPS",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    fontSize = 13.sp
-                ),
-                color = headerTextColor
-            )
+            // Header: Category Tabs (ALLOWED | NOT ALLOWED 🔒 | ALL)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isLightMode) Color(0xFFD4E7E1) else Color(0xFF06251E))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Tab 0: ALLOWED
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (selectedCategory == 0) {
+                                    if (isLightMode) Color(0xFFFFFFFF) else Color(0xFF0F473E)
+                                } else Color.Transparent
+                            )
+                            .clickable { selectedCategory = 0 }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "ALLOWED (${permittedApps.size})",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = if (selectedCategory == 0) FontWeight.ExtraBold else FontWeight.Medium,
+                                fontSize = 10.sp
+                            ),
+                            color = if (selectedCategory == 0) (if (isLightMode) Color(0xFF00796B) else TataPunchMint) else (if (isLightMode) Color(0xFF426860) else TataEvTextMuted)
+                        )
+                    }
+
+                    // Tab 1: NOT ALLOWED / LOCKED (Gold Lock Badge)
+                    Box(
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (selectedCategory == 1) {
+                                    if (isLightMode) Color(0xFFFFF3E0) else Color(0xFF2A2006)
+                                } else Color.Transparent
+                            )
+                            .clickable { selectedCategory = 1 }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Locked",
+                                tint = if (selectedCategory == 1) Color(0xFFFFB300) else (if (isLightMode) Color(0xFFB28704) else Color(0xFFFFB300).copy(alpha = 0.7f)),
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Text(
+                                text = "NOT ALLOWED (${notAllowedApps.size})",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (selectedCategory == 1) FontWeight.ExtraBold else FontWeight.Medium,
+                                    fontSize = 10.sp
+                                ),
+                                color = if (selectedCategory == 1) Color(0xFFFFB300) else (if (isLightMode) Color(0xFF8D6E18) else TataEvTextMuted)
+                            )
+                        }
+                    }
+
+                    // Tab 2: ALL
+                    val totalCount = if (allInstalledApps.isNotEmpty()) allInstalledApps.size else permittedApps.size
+                    Box(
+                        modifier = Modifier
+                            .weight(0.85f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (selectedCategory == 2) {
+                                    if (isLightMode) Color(0xFFFFFFFF) else Color(0xFF0F473E)
+                                } else Color.Transparent
+                            )
+                            .clickable { selectedCategory = 2 }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "ALL ($totalCount)",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = if (selectedCategory == 2) FontWeight.ExtraBold else FontWeight.Medium,
+                                fontSize = 10.sp
+                            ),
+                            color = if (selectedCategory == 2) (if (isLightMode) Color(0xFF00796B) else TataPunchMint) else (if (isLightMode) Color(0xFF426860) else TataEvTextMuted)
+                        )
+                    }
+                }
+
+                if (selectedCategory == 1) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "🔒 Password Protected: Tap any app to enter 8-digit PIN",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = if (isLightMode) Color(0xFFB28704) else Color(0xFFFFD54F)
+                    )
+                }
+            }
 
             // Middle: 2-Row x 4-Col Apps Grid with sleek right scrollbar indicator
             Row(
@@ -785,29 +914,32 @@ fun AllowedAppsCockpitCard(
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Apps Grid
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (apps.isEmpty()) {
-                        items(defaultVehicleApps) { app ->
-                            AppIconItemView(
-                                name = app.name,
-                                iconRes = null,
-                                iconBitmap = null,
-                                textColor = appTextColor,
-                                isLightMode = isLightMode,
-                                onClick = { onAppClick(app.packageName) }
-                            )
-                        }
-                    } else {
-                        items(apps) { app ->
+                if (displayApps.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (selectedCategory == 1) "No blocked apps.\nAll apps are allowed." else "No apps found.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = if (isLightMode) Color(0xFF6B8E86) else TataEvTextMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                } else {
+                    // Apps Grid
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(displayApps, key = { it.packageName }) { app ->
                             val bitmap = rememberDrawableBitmap(app.icon)
                             AppIconItemView(
                                 name = app.name,
@@ -836,7 +968,7 @@ fun AllowedAppsCockpitCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

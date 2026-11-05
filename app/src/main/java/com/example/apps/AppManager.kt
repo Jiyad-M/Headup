@@ -89,10 +89,19 @@ class AppManager(
     private val temporaryAuthorizedPackages = mutableMapOf<String, Long>()
 
     /**
-     * Authorizes an app temporarily (e.g. 10 minutes) after 8-digit password entry.
+     * Authorizes an app temporarily after 8-digit password entry
+     * (30 seconds window for OS activity transition).
      */
-    fun authorizeTemporarily(packageName: String, durationMillis: Long = 10 * 60 * 1000L) {
+    fun authorizeTemporarily(packageName: String, durationMillis: Long = 30 * 1000L) {
         temporaryAuthorizedPackages[packageName] = System.currentTimeMillis() + durationMillis
+    }
+
+    /**
+     * Clears all temporary password authorizations so blocked apps lock again immediately
+     * whenever user returns to Kiosk Launcher.
+     */
+    fun clearTemporaryAuthorizations() {
+        temporaryAuthorizedPackages.clear()
     }
 
     /**
@@ -129,6 +138,7 @@ class AppManager(
             currentBlacklist.remove(packageName) // remove from blacklist if allowed
         } else {
             currentAllowed.remove(packageName)
+            temporaryAuthorizedPackages.remove(packageName) // immediately revoke any temporary pass
         }
         preferences.allowedPackages = currentAllowed
         preferences.blacklistedPackages = currentBlacklist

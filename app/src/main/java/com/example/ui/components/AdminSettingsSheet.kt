@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.VolumeUp
@@ -47,6 +48,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -521,19 +524,113 @@ fun AllowedAppsTab(
     onToggleAppAllowed: (String, Boolean) -> Unit,
     onToggleAppBlacklisted: (String, Boolean) -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableIntStateOf(0) } // 0 = All, 1 = Allowed, 2 = Not Allowed (Protected)
+
+    val allowedCount = remember(allApps) { allApps.count { it.isAllowed } }
+    val blockedCount = remember(allApps) { allApps.count { !it.isAllowed } }
+
+    val filteredApps = remember(allApps, searchQuery, selectedFilter) {
+        allApps.filter { app ->
+            val matchesSearch = searchQuery.isBlank() ||
+                    app.name.contains(searchQuery, ignoreCase = true) ||
+                    app.packageName.contains(searchQuery, ignoreCase = true)
+            val matchesFilter = when (selectedFilter) {
+                1 -> app.isAllowed
+                2 -> !app.isAllowed
+                else -> true
+            }
+            matchesSearch && matchesFilter
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "App Access & Blacklist Policy",
+            text = "App Access & Password Protection",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = Color.White
         )
         Text(
-            text = "When Kiosk is activated, non-whitelisted apps remain hidden and blacklisted apps are strictly denied from opening anywhere.",
+            text = "Toggle ON for free launch. If toggle is OFF, the app is automatically blocked and strictly password-protected with your 8-digit PIN.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Search Input
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            placeholder = { Text("Search installed apps...", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null, tint = HudCyan, modifier = Modifier.size(18.dp))
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = CockpitSurface,
+                unfocusedContainerColor = CockpitSurface,
+                focusedBorderColor = HudCyan,
+                unfocusedBorderColor = CockpitBorder,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            )
+        )
+
+        // Filter Pills
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedFilter == 0,
+                onClick = { selectedFilter = 0 },
+                label = { Text("All (${allApps.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = HudCyan,
+                    selectedLabelColor = CockpitBlack,
+                    containerColor = CockpitCard,
+                    labelColor = Color.White
+                )
+            )
+
+            FilterChip(
+                selected = selectedFilter == 1,
+                onClick = { selectedFilter = 1 },
+                label = { Text("Allowed ($allowedCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = EmeraldGreen,
+                    selectedLabelColor = CockpitBlack,
+                    containerColor = CockpitCard,
+                    labelColor = EmeraldGreen
+                )
+            )
+
+            FilterChip(
+                selected = selectedFilter == 2,
+                onClick = { selectedFilter = 2 },
+                label = { Text("Not Allowed / Locked ($blockedCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = AmberGold,
+                    selectedLabelColor = CockpitBlack,
+                    containerColor = CockpitCard,
+                    labelColor = AmberGold
+                )
+            )
+        }
 
         LazyColumn(
             modifier = Modifier
@@ -541,11 +638,10 @@ fun AllowedAppsTab(
                 .testTag("all_apps_whitelist_list"),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(allApps, key = { it.packageName }) { app ->
+            items(filteredApps, key = { it.packageName }) { app ->
                 AppWhitelistRow(
                     app = app,
-                    onToggleAllowed = { isAllowed -> onToggleAppAllowed(app.packageName, isAllowed) },
-                    onToggleBlacklist = { isBlacklisted -> onToggleAppBlacklisted(app.packageName, isBlacklisted) }
+                    onToggleAllowed = { isAllowed -> onToggleAppAllowed(app.packageName, isAllowed) }
                 )
             }
         }
@@ -555,8 +651,7 @@ fun AllowedAppsTab(
 @Composable
 fun AppWhitelistRow(
     app: AppItem,
-    onToggleAllowed: (Boolean) -> Unit,
-    onToggleBlacklist: (Boolean) -> Unit
+    onToggleAllowed: (Boolean) -> Unit
 ) {
     val bitmap = rememberDrawableBitmap(app.icon)
 
@@ -566,17 +661,13 @@ fun AppWhitelistRow(
         colors = CardDefaults.cardColors(containerColor = CockpitCard),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            when {
-                app.isBlacklisted -> CrimsonRed.copy(alpha = 0.8f)
-                app.isAllowed -> HudCyan.copy(alpha = 0.5f)
-                else -> CockpitBorder
-            }
+            if (app.isAllowed) EmeraldGreen.copy(alpha = 0.5f) else AmberGold.copy(alpha = 0.4f)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -604,6 +695,19 @@ fun AppWhitelistRow(
                     } else {
                         Icon(imageVector = Icons.Default.Apps, contentDescription = null, tint = HudCyan)
                     }
+
+                    if (!app.isAllowed) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(AmberGold),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Black, modifier = Modifier.size(9.dp))
+                        }
+                    }
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -620,96 +724,65 @@ fun AppWhitelistRow(
                         )
 
                         // Status Badge
-                        if (app.isBlacklisted) {
+                        if (app.isAllowed) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(CrimsonRed.copy(alpha = 0.2f))
-                                    .border(1.dp, CrimsonRed, RoundedCornerShape(6.dp))
+                                    .background(EmeraldGreen.copy(alpha = 0.2f))
+                                    .border(1.dp, EmeraldGreen.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Block,
-                                        contentDescription = null,
-                                        tint = CrimsonRed,
-                                        modifier = Modifier.size(10.dp)
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = EmeraldGreen, modifier = Modifier.size(10.dp))
                                     Text(
-                                        text = "BLOCKED",
+                                        text = "ALLOWED",
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                        color = CrimsonRed
+                                        color = EmeraldGreen
                                     )
                                 }
                             }
-                        } else if (app.isAllowed) {
+                        } else {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(HudCyan.copy(alpha = 0.2f))
-                                    .border(1.dp, HudCyan, RoundedCornerShape(6.dp))
+                                    .background(AmberGold.copy(alpha = 0.2f))
+                                    .border(1.dp, AmberGold.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text(
-                                    text = "ALLOWED",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                    color = HudCyan
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Icon(Icons.Default.Lock, contentDescription = null, tint = AmberGold, modifier = Modifier.size(10.dp))
+                                    Text(
+                                        text = "PASSWORD PROTECTED",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                        color = AmberGold
+                                    )
+                                }
                             }
                         }
                     }
 
                     Text(
-                        text = app.packageName,
+                        text = if (app.isAllowed) "Allowed to open directly without password" else "Requires 8-digit password to open",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (app.isAllowed) MaterialTheme.colorScheme.onSurfaceVariant else AmberGold.copy(alpha = 0.85f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Blacklist toggle chip
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (app.isBlacklisted) CrimsonRed else CockpitSurface)
-                        .border(1.dp, if (app.isBlacklisted) CrimsonRed else CockpitBorder, RoundedCornerShape(8.dp))
-                        .clickable { onToggleBlacklist(!app.isBlacklisted) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                        .testTag("blacklist_btn_${app.packageName}")
-                ) {
-                    Text(
-                        text = if (app.isBlacklisted) "DENIED" else "BLOCK",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
-                        ),
-                        color = if (app.isBlacklisted) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // Whitelist toggle switch (disabled if explicitly blacklisted)
-                Switch(
-                    checked = app.isAllowed,
-                    onCheckedChange = onToggleAllowed,
-                    enabled = !app.isBlacklisted,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = CockpitBlack,
-                        checkedTrackColor = HudCyan,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        uncheckedTrackColor = CockpitSurface
-                    ),
-                    modifier = Modifier.testTag("switch_${app.packageName}")
-                )
-            }
+            // Allowed Toggle Switch (Toggle OFF = Blocked & Password Protected)
+            Switch(
+                checked = app.isAllowed,
+                onCheckedChange = onToggleAllowed,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = CockpitBlack,
+                    checkedTrackColor = EmeraldGreen,
+                    uncheckedThumbColor = AmberGold,
+                    uncheckedTrackColor = CockpitSurface
+                ),
+                modifier = Modifier.testTag("switch_${app.packageName}")
+            )
         }
     }
 }
