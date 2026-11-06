@@ -883,7 +883,7 @@ fun PowerSettingsTab(
                             color = Color.White
                         )
                         Text(
-                            text = "Within 3 seconds of unplugging, turns display and lights completely OFF in ANY app (Uber, Maps, etc.).",
+                            text = "Within 3 seconds of unplugging, turns display completely OFF. Double-tap to wake and single power button press are denied. To wake display while unplugged, press power button 3 times.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

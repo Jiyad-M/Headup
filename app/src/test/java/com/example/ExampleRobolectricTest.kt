@@ -318,4 +318,57 @@ class ExampleRobolectricTest {
     prefs.isLightMode = false
     assertFalse(prefs.isLightMode)
   }
+
+  @Test
+  fun `test Settings app is locked if not allowed and unlocked if allowed`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+    val appManager = com.example.apps.AppManager(context, prefs)
+
+    prefs.isActivated = true
+    val settingsPkg = "com.android.settings"
+
+    // 1. Settings is not in essentialSystemPackages
+    assertFalse(appManager.essentialSystemPackages.contains(settingsPkg))
+    assertFalse(appManager.isEssentialSystemPackage(settingsPkg))
+
+    // 2. By default, settings is NOT in allowedPackages -> isPackageAllowed returns false
+    prefs.allowedPackages = setOf("com.google.android.apps.maps")
+    assertFalse(appManager.isPackageAllowed(settingsPkg))
+    assertTrue(appManager.shouldInterceptApp(settingsPkg))
+
+    // 3. If admin adds settings to allowed packages -> isPackageAllowed returns true
+    appManager.toggleAppAllowed(settingsPkg, true)
+    assertTrue(appManager.isPackageAllowed(settingsPkg))
+    assertFalse(appManager.shouldInterceptApp(settingsPkg))
+
+    // 4. If admin removes settings from allowed packages -> isPackageAllowed returns false
+    appManager.toggleAppAllowed(settingsPkg, false)
+    assertFalse(appManager.isPackageAllowed(settingsPkg))
+    assertTrue(appManager.shouldInterceptApp(settingsPkg))
+  }
+
+  @Test
+  fun `test PowerMonitor screen on denial when unplugged and override on 3 presses`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = KioskPreferences(context)
+    val powerMonitor = com.example.power.PowerMonitor.getInstance(context, prefs)
+
+    prefs.sleepOnUnplugged = true
+
+    // When unplugged:
+    powerMonitor.handlePowerDisconnected()
+
+    // 1st screen on (e.g. double-tap or single power button press) -> denied (stays display off)
+    powerMonitor.handleScreenOn()
+    assertTrue(powerMonitor.isDisplayCompletelyOff.value)
+
+    // 2nd screen on -> still denied
+    powerMonitor.handleScreenOn()
+    assertTrue(powerMonitor.isDisplayCompletelyOff.value)
+
+    // 3rd screen on (within 2.5s window) -> triple-press override triggers!
+    powerMonitor.handleScreenOn()
+    assertFalse(powerMonitor.isDisplayCompletelyOff.value)
+  }
 }

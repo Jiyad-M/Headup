@@ -114,6 +114,12 @@ class PowerMonitor private constructor(
                 Intent.ACTION_POWER_DISCONNECTED -> {
                     handlePowerDisconnected()
                 }
+                Intent.ACTION_SCREEN_ON -> {
+                    handleScreenOn()
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    handleScreenOff()
+                }
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
                     val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
@@ -162,6 +168,8 @@ class PowerMonitor private constructor(
                 addAction(Intent.ACTION_POWER_CONNECTED)
                 addAction(Intent.ACTION_POWER_DISCONNECTED)
                 addAction(Intent.ACTION_BATTERY_CHANGED)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
             }
             val stickyIntent = ContextCompat.registerReceiver(
                 context,
@@ -188,6 +196,9 @@ class PowerMonitor private constructor(
     private val _powerPlugSweepTrigger = MutableStateFlow(0L)
     val powerPlugSweepTrigger: StateFlow<Long> = _powerPlugSweepTrigger.asStateFlow()
 
+    private val recentWakeTimestamps = mutableListOf<Long>()
+    private var isTemporaryWakeOverridden = false
+
     /**
      * Power plugged: Display ON permanently, screen bright, zero sleep.
      * Restores the previous app that was last open (Uber, Google Maps, etc.)
@@ -196,6 +207,8 @@ class PowerMonitor private constructor(
     fun handlePowerConnected() {
         powerOffJob?.cancel()
         powerOffJob = null
+        recentWakeTimestamps.clear()
+        isTemporaryWakeOverridden = false
         _unplugCountdown.value = null
         _isDisplayCompletelyOff.value = false
 
@@ -221,6 +234,8 @@ class PowerMonitor private constructor(
      */
     fun handlePowerDisconnected() {
         powerOffJob?.cancel()
+        recentWakeTimestamps.clear()
+        isTemporaryWakeOverridden = false
         _unplugCountdown.value = null
 
         if (!preferences.sleepOnUnplugged) {
@@ -236,6 +251,52 @@ class PowerMonitor private constructor(
                 turnHardwareScreenOff()
             }
         }
+    }
+
+    /**
+     * Handles display waking up (via power button or display double-tap):
+     * If power mode is active (sleepOnUnplugged = true) and device is unplugged:
+     * - Single power button press or double tap to wake is DENIED (turns hardware display immediately back OFF).
+     * - Triple power button press (3 presses within 2.5s) allows the display to turn ON.
+     */
+    fun handleScreenOn() {
+        val isPlugged = _powerState.value.isPlugged
+        val sleepOnUnplugged = preferences.sleepOnUnplugged
+
+        // If not in sleep on unplugged mode or device is currently plugged into charger, allow screen on
+        if (!sleepOnUnplugged || isPlugged) {
+            recentWakeTimestamps.clear()
+            return
+        }
+
+        // If already unlocked via triple press in this session, keep screen on
+        if (isTemporaryWakeOverridden) {
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        // Retain wake events within the last 2500ms
+        recentWakeTimestamps.removeAll { now - it > 2500L }
+        recentWakeTimestamps.add(now)
+
+        if (recentWakeTimestamps.size >= 3) {
+            // OVERRIDE: Triple power button press detected!
+            Log.i(TAG, "Triple power button press detected while unplugged! Allowing display to stay ON.")
+            recentWakeTimestamps.clear()
+            isTemporaryWakeOverridden = true
+            _isDisplayCompletelyOff.value = false
+            restoreNormalScreenTimeout()
+            bringKioskToFront()
+        } else {
+            // DENY: Single power button press or double tap
+            Log.i(TAG, "Display turn-on DENIED while unplugged (Wake attempt ${recentWakeTimestamps.size}/3). Forcing screen OFF.")
+            turnHardwareScreenOff()
+        }
+    }
+
+    fun handleScreenOff() {
+        // Reset temporary triple-press override on screen off so next wake requires 3 presses again
+        isTemporaryWakeOverridden = false
     }
 
     fun wakeDisplay() {

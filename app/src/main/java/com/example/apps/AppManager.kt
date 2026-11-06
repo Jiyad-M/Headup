@@ -146,13 +146,12 @@ class AppManager(
 
     /**
      * Set of core Android system and framework packages that must NEVER be intercepted
-     * so that Android services, dialogs, keyboards, settings, and phone calls function without interruption.
+     * so that Android services, dialogs, keyboards, and phone calls function without interruption.
+     * Note: Settings app (com.android.settings) is NOT exempted, so it is locked if not allowed.
      */
     val essentialSystemPackages = setOf(
         "android",
         "com.android.systemui",
-        "com.android.settings",
-        "com.samsung.android.settings",
         "com.google.android.gms",
         "com.google.android.gsf",
         "com.google.android.feedback",
@@ -199,6 +198,7 @@ class AppManager(
      */
     fun isNormalUserApp(packageName: String): Boolean {
         if (isEssentialSystemPackage(packageName)) return false
+        if (packageName == "com.android.settings" || packageName == "com.samsung.android.settings") return true
         return try {
             val pm = context.packageManager
             val launchIntent = pm.getLaunchIntentForPackage(packageName)

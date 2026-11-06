@@ -287,10 +287,14 @@ class KioskViewModel(
     }
 
     fun openAccessibilitySettings() {
+        AppManager.authorizeTemporarily("com.android.settings", 60_000L)
+        AppManager.authorizeTemporarily("com.samsung.android.settings", 60_000L)
         com.example.service.KioskAppLockAccessibilityService.openAccessibilitySettings(activity)
     }
 
     fun openOverlaySettings() {
+        AppManager.authorizeTemporarily("com.android.settings", 60_000L)
+        AppManager.authorizeTemporarily("com.samsung.android.settings", 60_000L)
         try {
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -623,6 +627,8 @@ class KioskViewModel(
     }
 
     fun requestDeviceAdmin() {
+        AppManager.authorizeTemporarily("com.android.settings", 60_000L)
+        AppManager.authorizeTemporarily("com.samsung.android.settings", 60_000L)
         try {
             val intent = PowerMonitor.createDeviceAdminIntent(activity)
             activity.startActivity(intent)
@@ -632,6 +638,8 @@ class KioskViewModel(
     }
 
     fun requestWriteSettings() {
+        AppManager.authorizeTemporarily("com.android.settings", 60_000L)
+        AppManager.authorizeTemporarily("com.samsung.android.settings", 60_000L)
         try {
             val intent = PowerMonitor.createWriteSettingsIntent(activity)
             activity.startActivity(intent)
