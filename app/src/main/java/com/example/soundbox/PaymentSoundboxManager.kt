@@ -78,10 +78,13 @@ class PaymentSoundboxManager private constructor(
     val activePaymentAlert: StateFlow<PaymentRecord?> = _activePaymentAlert.asStateFlow()
 
     init {
-        initTtsEngine(SpeechEngine.fromId(preferences.speechEngine))
+        initTtsEngine(SpeechEngine.GOOGLE_VOICE)
     }
 
-    fun initTtsEngine(engine: SpeechEngine) {
+    /**
+     * Initializes Google Speech / Google TTS exclusively (non-Google engines removed).
+     */
+    fun initTtsEngine(engine: SpeechEngine = SpeechEngine.GOOGLE_VOICE) {
         try {
             tts?.stop()
             tts?.shutdown()
@@ -89,16 +92,10 @@ class PaymentSoundboxManager private constructor(
         isTtsReady = false
 
         try {
-            when (engine) {
-                SpeechEngine.GOOGLE_SPEECH_SERVICES -> {
-                    tts = TextToSpeech(context.applicationContext, this, "com.google.android.tts")
-                }
-                else -> {
-                    tts = TextToSpeech(context.applicationContext, this)
-                }
-            }
+            // First attempt explicit Google TTS engine package
+            tts = TextToSpeech(context.applicationContext, this, "com.google.android.tts")
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing TTS with engine $engine", e)
+            Log.e(TAG, "Error initializing Google TTS, falling back to default TTS engine", e)
             try {
                 tts = TextToSpeech(context.applicationContext, this)
             } catch (_: Exception) {}
@@ -135,6 +132,23 @@ class PaymentSoundboxManager private constructor(
             }
         } else {
             Log.e(TAG, "TTS Initialization failed with status $status")
+        }
+    }
+
+    /**
+     * Sets hardware stream volume to maximum or user-selected loudness.
+     */
+    fun applyVolumeAndSpeed() {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (audioManager != null) {
+                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val userVol = preferences.soundboxVolume.coerceIn(0.1f, 1.0f)
+                val targetVol = (maxVol * userVol).toInt().coerceIn(1, maxVol)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed setting hardware audio volume", e)
         }
     }
 
@@ -191,12 +205,13 @@ class PaymentSoundboxManager private constructor(
             Log.w(TAG, "Error configuring voice for $gender", e)
         }
 
+        val speed = preferences.soundboxSpeed.coerceIn(0.7f, 1.6f)
         if (gender == VoiceGender.MALE) {
             tts?.setPitch(0.78f) // Deep authoritative masculine pitch
-            tts?.setSpeechRate(0.92f)
+            tts?.setSpeechRate(speed * 0.92f)
         } else {
             tts?.setPitch(1.15f) // Clear melodic feminine pitch
-            tts?.setSpeechRate(0.98f)
+            tts?.setSpeechRate(speed * 0.98f)
         }
     }
 
@@ -207,6 +222,9 @@ class PaymentSoundboxManager private constructor(
         onComplete: ((PaymentRecord) -> Unit)? = null
     ) {
         coroutineScope.launch {
+            // Apply maximum hardware volume output
+            applyVolumeAndSpeed()
+
             _isAnnouncing.value = true
 
             val currencyWord = getCurrencyWord(currencySymbol, amount)
@@ -222,6 +240,8 @@ class PaymentSoundboxManager private constructor(
                 appName.contains("gpay", ignoreCase = true) || appName.contains("google", ignoreCase = true) -> " on Google Pay"
                 appName.contains("bhim", ignoreCase = true) -> " on BHIM UPI"
                 appName.contains("bharatpe", ignoreCase = true) -> " on BharatPe"
+                appName.contains("amazon", ignoreCase = true) -> " on Amazon Pay"
+                appName.contains("airtel", ignoreCase = true) -> " on Airtel Payments"
                 else -> ""
             }
 
@@ -248,19 +268,17 @@ class PaymentSoundboxManager private constructor(
             // Pause between chime and voice
             delay(520)
 
-            // 2. Speak amount with selected Speech API
+            // 2. Speak amount with Google Voice
             val speechText = "$formattedAmount $currencyWord received$appSuffix"
             val gender = try {
                 VoiceGender.valueOf(preferences.voiceGender)
             } catch (_: Exception) {
                 VoiceGender.MALE
             }
-            val engine = SpeechEngine.fromId(preferences.speechEngine)
 
-            speakWithEngine(
+            speakWithGoogleVoice(
                 text = speechText,
                 gender = gender,
-                engine = engine,
                 onDone = {
                     coroutineScope.launch {
                         delay(1200)
@@ -273,22 +291,18 @@ class PaymentSoundboxManager private constructor(
         }
     }
 
-    fun speakWithEngine(
+    fun speakWithGoogleVoice(
         text: String,
         gender: VoiceGender,
-        engine: SpeechEngine = SpeechEngine.fromId(preferences.speechEngine),
         onDone: (() -> Unit)? = null
     ) {
-        if (engine == SpeechEngine.NATURAL_CLOUD) {
-            coroutineScope.launch {
-                val success = playNaturalCloudVoice(text, gender, onDone)
-                if (!success) {
-                    Log.w(TAG, "Natural Cloud Speech returned false, speaking via on-device TTS")
-                    speakWithLocalTts(text, gender, onDone)
-                }
+        applyVolumeAndSpeed()
+        coroutineScope.launch {
+            val success = playNaturalCloudVoice(text, gender, onDone)
+            if (!success) {
+                Log.w(TAG, "Natural Cloud Speech returned false, speaking via on-device Google TTS")
+                speakWithLocalTts(text, gender, onDone)
             }
-        } else {
-            speakWithLocalTts(text, gender, onDone)
         }
     }
 
@@ -345,15 +359,21 @@ class PaymentSoundboxManager private constructor(
                 mp.setDataSource(cacheFile.absolutePath)
                 mp.prepare()
 
+                // Apply volume
+                val userVol = preferences.soundboxVolume.coerceIn(0.1f, 1.0f)
+                mp.setVolume(userVol, userVol)
+
+                // Apply speed
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     try {
                         val params = PlaybackParams()
+                        val speed = preferences.soundboxSpeed.coerceIn(0.7f, 1.6f)
                         if (gender == VoiceGender.MALE) {
                             params.pitch = 0.84f
-                            params.speed = 0.94f
+                            params.speed = speed * 0.94f
                         } else {
                             params.pitch = 1.05f
-                            params.speed = 1.00f
+                            params.speed = speed * 1.00f
                         }
                         mp.playbackParams = params
                     } catch (e: Exception) {
@@ -378,7 +398,7 @@ class PaymentSoundboxManager private constructor(
             }
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error playing Natural Cloud voice", e)
+            Log.e(TAG, "Error playing Natural Cloud Google voice", e)
             false
         }
     }
@@ -389,11 +409,12 @@ class PaymentSoundboxManager private constructor(
         onDone: (() -> Unit)?
     ) {
         configureVoice(gender)
+        val userVol = preferences.soundboxVolume.coerceIn(0.1f, 1.0f)
         if (isTtsReady && tts != null) {
             val utteranceId = "SPEECH_${System.currentTimeMillis()}"
             val params = android.os.Bundle()
             params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
-            params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+            params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, userVol)
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
         } else {
             // Queue speech until TTS finishes initializing
@@ -403,20 +424,25 @@ class PaymentSoundboxManager private constructor(
     }
 
     fun testVoicePreview(gender: VoiceGender) {
+        applyVolumeAndSpeed()
         val sampleText = if (gender == VoiceGender.MALE) {
-            "Male voice active. 150 rupees received on Paytm."
+            "Google Male voice active. 150 rupees received on Paytm."
         } else {
-            "Female voice active. 150 rupees received on Google Pay."
+            "Google Female voice active. 150 rupees received on Google Pay."
         }
-        val engine = SpeechEngine.fromId(preferences.speechEngine)
-        speakWithEngine(sampleText, gender, engine)
+        speakWithGoogleVoice(sampleText, gender)
     }
 
     fun dismissActiveAlert() {
         _activePaymentAlert.value = null
     }
 
+    /**
+     * Synthesizes 11 distinct merchant soundbox & automotive chime sounds.
+     * Uses maximum hardware AudioTrack volume scaled by preferences.soundboxVolume.
+     */
     fun playTone(tone: SoundboxTone) {
+        applyVolumeAndSpeed()
         Thread {
             try {
                 val sampleRate = 44100
@@ -434,14 +460,43 @@ class PaymentSoundboxManager private constructor(
                         Pair(783.99, 0.12), // G5
                         Pair(1046.50, 0.26) // C6
                     )
-                    SoundboxTone.CLASSIC_BEEP -> listOf(
-                        Pair(980.0, 0.22)
+                    SoundboxTone.BHIM_UPI -> listOf(
+                        Pair(587.33, 0.10), // D5
+                        Pair(739.99, 0.10), // F#5
+                        Pair(880.00, 0.12), // A5
+                        Pair(1174.66, 0.26) // D6
+                    )
+                    SoundboxTone.AMAZON_PAY -> listOf(
+                        Pair(880.00, 0.11),  // A5
+                        Pair(1318.51, 0.26) // E6
+                    )
+                    SoundboxTone.AIRTEL_PAY -> listOf(
+                        Pair(659.25, 0.09), // E5
+                        Pair(783.99, 0.09), // G5
+                        Pair(1046.50, 0.24) // C6
+                    )
+                    SoundboxTone.TATA_EV_CHIME -> listOf(
+                        Pair(440.00, 0.11), // A4
+                        Pair(554.37, 0.11), // C#5
+                        Pair(659.25, 0.13), // E5
+                        Pair(880.00, 0.28)  // A5
                     )
                     SoundboxTone.CRYSTAL_HARP -> listOf(
                         Pair(523.25, 0.08), // C5
                         Pair(783.99, 0.08), // G5
                         Pair(1046.50, 0.09), // C6
                         Pair(1318.51, 0.24) // E6
+                    )
+                    SoundboxTone.SONIC_RADAR -> listOf(
+                        Pair(1200.0, 0.11),
+                        Pair(1550.0, 0.22)
+                    )
+                    SoundboxTone.CLASSIC_BEEP -> listOf(
+                        Pair(980.0, 0.22)
+                    )
+                    SoundboxTone.CASH_REGISTER -> listOf(
+                        Pair(1400.0, 0.08),
+                        Pair(2150.0, 0.25)
                     )
                 }
 
@@ -452,6 +507,7 @@ class PaymentSoundboxManager private constructor(
 
                 val pcmSamples = ShortArray(totalSamples)
                 var offset = 0
+                val userVolume = preferences.soundboxVolume.coerceIn(0.1f, 1.0f)
 
                 for (note in notes) {
                     val freq = note.first
@@ -464,7 +520,8 @@ class PaymentSoundboxManager private constructor(
                         val sample = (sin(2.0 * Math.PI * freq * t) * 0.82 +
                                 sin(4.0 * Math.PI * freq * t) * 0.18) * envelope
 
-                        pcmSamples[offset + i] = (sample * Short.MAX_VALUE * 0.95).toInt().toShort()
+                        // Maximize loudness without digital clipping
+                        pcmSamples[offset + i] = (sample * Short.MAX_VALUE * 0.98 * userVolume).toInt().toShort()
                     }
                     offset += noteSamples
                 }
@@ -488,6 +545,7 @@ class PaymentSoundboxManager private constructor(
                     .build()
 
                 audioTrack.write(pcmSamples, 0, pcmSamples.size)
+                audioTrack.setVolume(AudioTrack.getMaxVolume())
                 audioTrack.play()
                 val totalDurationMs = (notes.sumOf { it.second } * 1000).toLong() + 50
                 Thread.sleep(totalDurationMs)

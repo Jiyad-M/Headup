@@ -96,40 +96,37 @@ class KioskAppLockAccessibilityService : AccessibilityService() {
 
         val pkgName = event.packageName?.toString() ?: return
 
-        // Ignore our own kiosk launcher, system UI overlays, and input methods
-        if (pkgName == packageName) return
-        if (pkgName == "com.android.systemui") return
-        if (pkgName.startsWith("com.android.inputmethod") || pkgName.startsWith("com.google.android.inputmethod") || pkgName.startsWith("com.samsung.android.honeyboard")) return
+        // 1. Never intercept essential system services, framework components, keyboards, or settings
+        if (appManager.isEssentialSystemPackage(pkgName)) return
 
-        // If Kiosk is not activated, do not block
-        if (!preferences.isActivated) return
+        // 2. Never intercept if temporarily password-authorized
+        if (AppManager.isTemporarilyAuthorized(pkgName)) return
 
-        // Verify if package is allowed or temporarily password-authorized
-        val isAllowed = appManager.isPackageAllowed(pkgName)
-        if (!isAllowed) {
-            val now = System.currentTimeMillis()
-            // Debounce rapid window changes for the same package within 800ms
-            if (pkgName == lastInterceptedPackage && (now - lastInterceptTime) < 800L) {
-                return
-            }
-            lastInterceptedPackage = pkgName
-            lastInterceptTime = now
+        // 3. Only intercept normal user-facing apps (with launcher icon) that are currently blocked
+        if (!appManager.shouldInterceptApp(pkgName)) return
 
-            Log.w(TAG, "SYSTEM LOCK INTERCEPTION: $pkgName is blocked! Launching AppLockOverlayActivity.")
-
-            // Immediately launch the full-screen 8-digit PIN lock overlay over this unapproved app
-            val lockIntent = Intent(this, AppLockOverlayActivity::class.java).apply {
-                putExtra(AppLockOverlayActivity.EXTRA_LOCKED_PACKAGE, pkgName)
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                )
-            }
-            startActivity(lockIntent)
+        val now = System.currentTimeMillis()
+        // Debounce rapid window changes for the same package within 1000ms
+        if (pkgName == lastInterceptedPackage && (now - lastInterceptTime) < 1000L) {
+            return
         }
+        lastInterceptedPackage = pkgName
+        lastInterceptTime = now
+
+        Log.w(TAG, "SYSTEM LOCK INTERCEPTION: $pkgName is blocked! Launching AppLockOverlayActivity.")
+
+        // Immediately launch the full-screen 8-digit PIN lock overlay over this unapproved app
+        val lockIntent = Intent(this, AppLockOverlayActivity::class.java).apply {
+            putExtra(AppLockOverlayActivity.EXTRA_LOCKED_PACKAGE, pkgName)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+            )
+        }
+        startActivity(lockIntent)
     }
 
     override fun onInterrupt() {

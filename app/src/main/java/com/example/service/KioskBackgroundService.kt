@@ -127,31 +127,23 @@ class KioskBackgroundService : Service() {
                             }
                         }
 
-                        if (foregroundPkg != null &&
-                            foregroundPkg != packageName &&
-                            foregroundPkg != "com.android.systemui" &&
-                            !foregroundPkg.startsWith("com.android.inputmethod") &&
-                            !foregroundPkg.startsWith("com.google.android.inputmethod") &&
-                            !foregroundPkg.startsWith("com.samsung.android.honeyboard")
-                        ) {
-                            if (!appManager.isPackageAllowed(foregroundPkg)) {
-                                val now = System.currentTimeMillis()
-                                if (foregroundPkg != lastDetectedPkg || (now - lastDetectionTime) > 1000L) {
-                                    lastDetectedPkg = foregroundPkg
-                                    lastDetectionTime = now
+                        if (foregroundPkg != null && appManager.shouldInterceptApp(foregroundPkg)) {
+                            val now = System.currentTimeMillis()
+                            if (foregroundPkg != lastDetectedPkg || (now - lastDetectionTime) > 1000L) {
+                                lastDetectedPkg = foregroundPkg
+                                lastDetectionTime = now
 
-                                    val lockIntent = Intent(applicationContext, com.example.ui.AppLockOverlayActivity::class.java).apply {
-                                        putExtra(com.example.ui.AppLockOverlayActivity.EXTRA_LOCKED_PACKAGE, foregroundPkg)
-                                        addFlags(
-                                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                                        )
-                                    }
-                                    startActivity(lockIntent)
+                                val lockIntent = Intent(applicationContext, com.example.ui.AppLockOverlayActivity::class.java).apply {
+                                    putExtra(com.example.ui.AppLockOverlayActivity.EXTRA_LOCKED_PACKAGE, foregroundPkg)
+                                    addFlags(
+                                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                        Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                                    )
                                 }
+                                startActivity(lockIntent)
                             }
                         }
                     }

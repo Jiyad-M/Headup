@@ -58,6 +58,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -117,7 +119,9 @@ fun AdminSettingsSheet(
     currentTheme: AutomotiveBrandTheme,
     selectedVoiceGender: VoiceGender = VoiceGender.MALE,
     selectedTone: SoundboxTone = SoundboxTone.PAYTM_TRIAD,
-    selectedSpeechEngine: SpeechEngine = SpeechEngine.NATURAL_CLOUD,
+    selectedSpeechEngine: SpeechEngine = SpeechEngine.GOOGLE_VOICE,
+    soundboxVolume: Float = 1.0f,
+    soundboxSpeed: Float = 1.0f,
     isDefaultHome: Boolean = false,
     isLightMode: Boolean = false,
     isDeviceAdminActive: Boolean = true,
@@ -137,6 +141,9 @@ fun AdminSettingsSheet(
     onVoiceGenderChange: (VoiceGender) -> Unit = {},
     onSoundboxToneChange: (SoundboxTone) -> Unit = {},
     onSpeechEngineChange: (SpeechEngine) -> Unit = {},
+    onVolumeChange: (Float) -> Unit = {},
+    onMaxVolumeClick: () -> Unit = {},
+    onSpeedChange: (Float) -> Unit = {},
     onPreviewTone: (SoundboxTone) -> Unit = {},
     onPreviewVoice: (VoiceGender) -> Unit = {},
     onPromptSetDefaultLauncher: () -> Unit = {},
@@ -277,11 +284,16 @@ fun AdminSettingsSheet(
                             selectedVoiceGender = selectedVoiceGender,
                             selectedTone = selectedTone,
                             selectedSpeechEngine = selectedSpeechEngine,
+                            soundboxVolume = soundboxVolume,
+                            soundboxSpeed = soundboxSpeed,
                             paymentHistory = paymentHistory,
                             onUpdateCurrency = onUpdateCurrency,
                             onVoiceGenderChange = onVoiceGenderChange,
                             onSoundboxToneChange = onSoundboxToneChange,
                             onSpeechEngineChange = onSpeechEngineChange,
+                            onVolumeChange = onVolumeChange,
+                            onMaxVolumeClick = onMaxVolumeClick,
+                            onSpeedChange = onSpeedChange,
                             onPreviewTone = onPreviewTone,
                             onPreviewVoice = onPreviewVoice,
                             onTestAnnouncement = onTestAnnouncement
@@ -1311,12 +1323,17 @@ fun SoundboxSettingsTab(
     currency: String,
     selectedVoiceGender: VoiceGender,
     selectedTone: SoundboxTone,
-    selectedSpeechEngine: SpeechEngine = SpeechEngine.NATURAL_CLOUD,
+    selectedSpeechEngine: SpeechEngine = SpeechEngine.GOOGLE_VOICE,
+    soundboxVolume: Float = 1.0f,
+    soundboxSpeed: Float = 1.0f,
     paymentHistory: List<PaymentRecord>,
     onUpdateCurrency: (String) -> Unit,
     onVoiceGenderChange: (VoiceGender) -> Unit,
     onSoundboxToneChange: (SoundboxTone) -> Unit,
     onSpeechEngineChange: (SpeechEngine) -> Unit = {},
+    onVolumeChange: (Float) -> Unit = {},
+    onMaxVolumeClick: () -> Unit = {},
+    onSpeedChange: (Float) -> Unit = {},
     onPreviewTone: (SoundboxTone) -> Unit,
     onPreviewVoice: (VoiceGender) -> Unit,
     onTestAnnouncement: (Double) -> Unit
@@ -1329,19 +1346,211 @@ fun SoundboxSettingsTab(
     ) {
         item {
             Text(
-                text = "Payment Soundbox Voice & Chime Settings",
+                text = "Payment Soundbox Voice, Volume & Chime Settings",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
         }
 
-        // 0. Speech Engine Selection Card (Google Natural Cloud vs Local)
+        // 1. Hardware Volume Output Card (Max Volume)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, if (soundboxVolume >= 0.98f) HudMint else CockpitBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                tint = HudMint,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Soundbox Volume",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (soundboxVolume >= 0.98f) HudMint else CockpitSurface)
+                                .border(1.dp, HudMint, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${(soundboxVolume * 100).toInt()}% ${if (soundboxVolume >= 0.98f) "MAX" else ""}",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (soundboxVolume >= 0.98f) CockpitBlack else HudMint
+                                )
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Controls hardware speaker volume for payment chimes and announcements. Maximum volume produces loudest sound.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Slider(
+                        value = soundboxVolume,
+                        onValueChange = onVolumeChange,
+                        valueRange = 0.1f..1.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = HudMint,
+                            activeTrackColor = HudMint,
+                            inactiveTrackColor = CockpitSurface
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Button(
+                        onClick = onMaxVolumeClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = HudMint,
+                            contentColor = CockpitBlack
+                        )
+                    ) {
+                        Icon(imageVector = Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("SET TO MAXIMUM VOLUME (100% MAX LOUDNESS)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // 2. Speech Speed Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = CockpitCard),
                 border = androidx.compose.foundation.BorderStroke(1.dp, HudCyan.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = HudCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Announcement Speech Speed",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+
+                        val speedLabel = when {
+                            soundboxSpeed <= 0.85f -> "Slow"
+                            soundboxSpeed in 0.86f..1.14f -> "Normal"
+                            soundboxSpeed in 1.15f..1.35f -> "Fast"
+                            else -> "Ultra"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(HudCyan.copy(alpha = 0.2f))
+                                .border(1.dp, HudCyan, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${String.format(java.util.Locale.US, "%.2f", soundboxSpeed)}x ($speedLabel)",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = HudCyan)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Adjust speech playback rate for quicker or clearer verbal announcements.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Slider(
+                        value = soundboxSpeed,
+                        onValueChange = onSpeedChange,
+                        valueRange = 0.75f..1.5f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = HudCyan,
+                            activeTrackColor = HudCyan,
+                            inactiveTrackColor = CockpitSurface
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val presets = listOf(
+                            Pair("0.8x Slow", 0.8f),
+                            Pair("1.0x Normal", 1.0f),
+                            Pair("1.2x Fast", 1.2f),
+                            Pair("1.4x Ultra", 1.4f)
+                        )
+                        presets.forEach { (label, speedVal) ->
+                            val isCurrent = kotlin.math.abs(soundboxSpeed - speedVal) < 0.05f
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isCurrent) HudCyan else CockpitSurface)
+                                    .border(1.dp, if (isCurrent) HudCyan else CockpitBorder, RoundedCornerShape(8.dp))
+                                    .clickable { onSpeedChange(speedVal) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                    color = if (isCurrent) CockpitBlack else Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Google Voice Selection (Held Exclusively, Others Removed)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CockpitCard),
+                border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold.copy(alpha = 0.6f))
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1354,97 +1563,25 @@ fun SoundboxSettingsTab(
                         Icon(
                             imageVector = Icons.Default.Campaign,
                             contentDescription = null,
-                            tint = HudCyan,
+                            tint = AmberGold,
                             modifier = Modifier.size(20.dp)
                         )
-                        Text(
-                            text = "Speech Engine (Voice Quality)",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
-
-                    Text(
-                        text = "Switch between high-definition studio speech API and local device synthesizers.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SpeechEngine.entries.forEach { engine ->
-                            val isSelected = engine == selectedSpeechEngine
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isSelected) HudCyan.copy(alpha = 0.15f) else CockpitSurface)
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) HudCyan else CockpitBorder,
-                                        RoundedCornerShape(12.dp)
-                                    )
-                                    .clickable { onSpeechEngineChange(engine) }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = if (isSelected) HudCyan else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-
-                                Column {
-                                    Text(
-                                        text = engine.displayName,
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isSelected) HudCyan else Color.White
-                                    )
-                                    Text(
-                                        text = engine.subtitle,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+                        Column {
+                            Text(
+                                text = "Google Voice Engine (Active)",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Official Google High-Definition Neural Speech Engine",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AmberGold
+                            )
                         }
                     }
-                }
-            }
-        }
-
-        // 1. Voice Gender Selection (Male / Female)
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = CockpitCard),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CockpitBorder)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.RecordVoiceOver,
-                            contentDescription = null,
-                            tint = HudMint,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Soundbox Voice Gender",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
 
                     Text(
-                        text = "Select male or female announcement voice for realistic payment notifications.",
+                        text = "Exclusively powered by Google Neural Studio Voice. Select male or female voice profile.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

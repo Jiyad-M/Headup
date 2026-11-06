@@ -152,9 +152,28 @@ class AppLockOverlayActivity : ComponentActivity() {
     private fun handlePinSubmission(pin: String): Boolean {
         val isValid = securityManager.verifyPin(pin)
         if (isValid) {
-            // Authorize this app temporarily for 15 minutes of uninterrupted use
-            appManager.authorizeTemporarily(lockedPackage, 15 * 60 * 1000L)
+            // 1. Authorize this app temporarily for 15 minutes of uninterrupted use
+            AppManager.authorizeTemporarily(lockedPackage, 15 * 60 * 1000L)
             preferences.lastOpenedPackage = lockedPackage
+
+            // 2. Directly open the requested application
+            if (lockedPackage.isNotBlank()) {
+                try {
+                    val pm = packageManager
+                    val launchIntent = pm.getLaunchIntentForPackage(lockedPackage)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                        )
+                        startActivity(launchIntent)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("AppLockOverlay", "Failed to launch $lockedPackage after unlock", e)
+                }
+            }
+
             finish()
             overridePendingTransition(0, 0)
             return true

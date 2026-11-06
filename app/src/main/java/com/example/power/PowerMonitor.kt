@@ -208,8 +208,8 @@ class PowerMonitor private constructor(
             restoreNormalScreenTimeout()
         }
 
-        // Restore the last opened app (Uber, Maps, etc.) so user returns right to where they were!
-        restoreLastOpenedApp()
+        // Directly bring Kiosk app to front on charger plugged (display on, then kiosk app)
+        bringKioskToFront()
 
         // Trigger gauge sweep on display on from charger plug
         _powerPlugSweepTrigger.value = System.currentTimeMillis()
@@ -300,6 +300,23 @@ class PowerMonitor private constructor(
                     60000 // Standard 1 minute timeout
                 )
             } catch (_: Exception) {}
+        }
+    }
+
+    fun bringKioskToFront() {
+        try {
+            val intent = Intent(context, com.example.MainActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+                )
+            }
+            context.startActivity(intent)
+            Log.i(TAG, "Directly brought Kiosk app to front on power connected")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to bring kiosk app to front", e)
         }
     }
 

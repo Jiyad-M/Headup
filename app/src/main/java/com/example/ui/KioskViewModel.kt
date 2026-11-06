@@ -174,6 +174,12 @@ class KioskViewModel(
     )
     val speechEngine: StateFlow<SpeechEngine> = _speechEngine.asStateFlow()
 
+    private val _soundboxVolume = MutableStateFlow(preferences.soundboxVolume)
+    val soundboxVolume: StateFlow<Float> = _soundboxVolume.asStateFlow()
+
+    private val _soundboxSpeed = MutableStateFlow(preferences.soundboxSpeed)
+    val soundboxSpeed: StateFlow<Float> = _soundboxSpeed.asStateFlow()
+
     val gpsSpeed: StateFlow<Int> = gpsSpeedometer.speedKmH
     val hasGpsFix: StateFlow<Boolean> = gpsSpeedometer.hasGpsFix
     val gpsStatusText: StateFlow<String> = gpsSpeedometer.gpsStatusText
@@ -668,6 +674,28 @@ class KioskViewModel(
         _speechEngine.value = engine
         soundboxManager.initTtsEngine(engine)
         _statusMessage.value = "${engine.displayName} selected"
+    }
+
+    fun setSoundboxVolume(volume: Float) {
+        val clamped = volume.coerceIn(0.1f, 1.0f)
+        preferences.soundboxVolume = clamped
+        _soundboxVolume.value = clamped
+        soundboxManager.applyVolumeAndSpeed()
+    }
+
+    fun setMaxSoundboxVolume() {
+        preferences.soundboxVolume = 1.0f
+        _soundboxVolume.value = 1.0f
+        soundboxManager.applyVolumeAndSpeed()
+        soundboxManager.playTone(SoundboxTone.fromId(preferences.soundboxTone))
+        _statusMessage.value = "Soundbox volume set to 100% MAXIMUM"
+    }
+
+    fun setSoundboxSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.7f, 1.6f)
+        preferences.soundboxSpeed = clamped
+        _soundboxSpeed.value = clamped
+        soundboxManager.applyConfiguredVoice()
     }
 
     fun enforceDefaultLauncherIfActive() {

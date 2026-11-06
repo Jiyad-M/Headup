@@ -87,6 +87,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
     val voiceGender by viewModel.voiceGender.collectAsStateWithLifecycle()
     val soundboxTone by viewModel.soundboxTone.collectAsStateWithLifecycle()
     val speechEngine by viewModel.speechEngine.collectAsStateWithLifecycle()
+    val soundboxVolume by viewModel.soundboxVolume.collectAsStateWithLifecycle()
+    val soundboxSpeed by viewModel.soundboxSpeed.collectAsStateWithLifecycle()
     val activePinPurpose by viewModel.activePinPurpose.collectAsStateWithLifecycle()
     val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
     val hasLocationPermission by viewModel.hasLocationPermission.collectAsStateWithLifecycle()
@@ -306,6 +308,8 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 selectedVoiceGender = voiceGender,
                 selectedTone = soundboxTone,
                 selectedSpeechEngine = speechEngine,
+                soundboxVolume = soundboxVolume,
+                soundboxSpeed = soundboxSpeed,
                 isDefaultHome = isDefaultHome,
                 isLightMode = isLightMode,
                 isDeviceAdminActive = isDeviceAdminActive,
@@ -325,6 +329,9 @@ fun KioskHomeScreen(viewModel: KioskViewModel) {
                 onVoiceGenderChange = { viewModel.setVoiceGender(it) },
                 onSoundboxToneChange = { viewModel.setSoundboxTone(it) },
                 onSpeechEngineChange = { viewModel.setSpeechEngine(it) },
+                onVolumeChange = { viewModel.setSoundboxVolume(it) },
+                onMaxVolumeClick = { viewModel.setMaxSoundboxVolume() },
+                onSpeedChange = { viewModel.setSoundboxSpeed(it) },
                 onPreviewTone = { viewModel.previewTone(it) },
                 onPreviewVoice = { viewModel.previewVoice(it) },
                 onPromptSetDefaultLauncher = { viewModel.promptSetDefaultLauncher() },

@@ -86,22 +86,141 @@ class AppManager(
         all.filter { allowedSet.contains(it.packageName) && !blacklistSet.contains(it.packageName) }
     }
 
-    private val temporaryAuthorizedPackages = mutableMapOf<String, Long>()
+    companion object {
+        private val temporaryAuthorizedPackages = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        private val temporaryAuthorizedTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
-    /**
-     * Authorizes an app temporarily after 8-digit password entry
-     * (30 seconds window for OS activity transition).
-     */
-    fun authorizeTemporarily(packageName: String, durationMillis: Long = 30 * 1000L) {
-        temporaryAuthorizedPackages[packageName] = System.currentTimeMillis() + durationMillis
+        /**
+         * Authorizes an app temporarily after 8-digit password entry.
+         * Default duration is 15 minutes of uninterrupted use.
+         */
+        fun authorizeTemporarily(packageName: String, durationMillis: Long = 15 * 60 * 1000L) {
+            val now = System.currentTimeMillis()
+            temporaryAuthorizedPackages[packageName] = now + durationMillis
+            temporaryAuthorizedTimestamps[packageName] = now
+        }
+
+        /**
+         * Checks if an app is currently authorized via password match.
+         */
+        fun isTemporarilyAuthorized(packageName: String): Boolean {
+            val expiry = temporaryAuthorizedPackages[packageName] ?: return false
+            if (System.currentTimeMillis() < expiry) {
+                return true
+            } else {
+                temporaryAuthorizedPackages.remove(packageName)
+                temporaryAuthorizedTimestamps.remove(packageName)
+                return false
+            }
+        }
+
+        /**
+         * Clears temporary password authorizations.
+         * Grace period (default 10s) ensures an app that was JUST authorized will not be wiped
+         * by transient onResume transitions while switching to the unlocked app.
+         */
+        fun clearTemporaryAuthorizations(minimumAgeMillis: Long = 10_000L) {
+            val now = System.currentTimeMillis()
+            val iterator = temporaryAuthorizedPackages.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                val authorizedAt = temporaryAuthorizedTimestamps[entry.key] ?: 0L
+                if (now - authorizedAt > minimumAgeMillis) {
+                    iterator.remove()
+                    temporaryAuthorizedTimestamps.remove(entry.key)
+                }
+            }
+        }
     }
 
     /**
-     * Clears all temporary password authorizations so blocked apps lock again immediately
-     * whenever user returns to Kiosk Launcher.
+     * Instance delegation for backward compatibility
      */
-    fun clearTemporaryAuthorizations() {
-        temporaryAuthorizedPackages.clear()
+    fun authorizeTemporarily(packageName: String, durationMillis: Long = 15 * 60 * 1000L) {
+        Companion.authorizeTemporarily(packageName, durationMillis)
+    }
+
+    fun clearTemporaryAuthorizations(minimumAgeMillis: Long = 10_000L) {
+        Companion.clearTemporaryAuthorizations(minimumAgeMillis)
+    }
+
+    /**
+     * Set of core Android system and framework packages that must NEVER be intercepted
+     * so that Android services, dialogs, keyboards, settings, and phone calls function without interruption.
+     */
+    val essentialSystemPackages = setOf(
+        "android",
+        "com.android.systemui",
+        "com.android.settings",
+        "com.samsung.android.settings",
+        "com.google.android.gms",
+        "com.google.android.gsf",
+        "com.google.android.feedback",
+        "com.android.packageinstaller",
+        "com.google.android.packageinstaller",
+        "com.samsung.android.packageinstaller",
+        "com.android.permissioncontroller",
+        "com.google.android.permissioncontroller",
+        "com.android.phone",
+        "com.android.server.telecom",
+        "com.samsung.android.incallui",
+        "com.android.incallui",
+        "com.android.certinstaller",
+        "com.android.keyguard",
+        "com.sec.android.app.launcher",
+        "com.sec.android.app.myfiles",
+        "com.google.android.documentsui",
+        context.packageName
+    )
+
+    /**
+     * Checks if a package is an essential Android system service or component that should never be locked.
+     */
+    fun isEssentialSystemPackage(packageName: String): Boolean {
+        if (packageName.isBlank()) return true
+        if (packageName == context.packageName) return true
+        if (essentialSystemPackages.contains(packageName)) return true
+        if (packageName.startsWith("com.android.inputmethod") ||
+            packageName.startsWith("com.google.android.inputmethod") ||
+            packageName.startsWith("com.samsung.android.honeyboard") ||
+            packageName.contains(".ime") ||
+            packageName.contains("inputmethod") ||
+            packageName.contains("keyboard") ||
+            packageName.contains("permissioncontroller")
+        ) {
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Determines whether a package is a normal user-facing app (i.e. has a launcher activity icon).
+     * Background services, internal frameworks, and headless providers return false.
+     */
+    fun isNormalUserApp(packageName: String): Boolean {
+        if (isEssentialSystemPackage(packageName)) return false
+        return try {
+            val pm = context.packageManager
+            val launchIntent = pm.getLaunchIntentForPackage(packageName)
+            launchIntent != null
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Determines if a package should be intercepted by App Lock.
+     * ONLY returns true if:
+     * 1. Kiosk is activated
+     * 2. It is a NORMAL USER APP (has a launch intent, not a system service or IME)
+     * 3. It is NOT currently allowed (toggle is OFF in Admin Settings)
+     * 4. It is NOT temporarily password-authorized
+     */
+    fun shouldInterceptApp(packageName: String): Boolean {
+        if (!preferences.isActivated) return false
+        if (isEssentialSystemPackage(packageName)) return false
+        if (!isNormalUserApp(packageName)) return false
+        return !isPackageAllowed(packageName)
     }
 
     /**
@@ -113,11 +232,11 @@ class AppManager(
      */
     fun isPackageAllowed(packageName: String): Boolean {
         if (packageName == context.packageName) return true
+        if (isEssentialSystemPackage(packageName)) return true
         if (!preferences.isActivated) return true
 
         // 1. Password-unlocked temporary authorization
-        val tempExpiry = temporaryAuthorizedPackages[packageName]
-        if (tempExpiry != null && System.currentTimeMillis() < tempExpiry) {
+        if (Companion.isTemporarilyAuthorized(packageName)) {
             return true
         }
 
@@ -138,7 +257,8 @@ class AppManager(
             currentBlacklist.remove(packageName) // remove from blacklist if allowed
         } else {
             currentAllowed.remove(packageName)
-            temporaryAuthorizedPackages.remove(packageName) // immediately revoke any temporary pass
+            Companion.temporaryAuthorizedPackages.remove(packageName) // immediately revoke any temporary pass
+            Companion.temporaryAuthorizedTimestamps.remove(packageName)
         }
         preferences.allowedPackages = currentAllowed
         preferences.blacklistedPackages = currentBlacklist

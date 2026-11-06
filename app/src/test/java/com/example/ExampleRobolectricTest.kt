@@ -207,56 +207,68 @@ class ExampleRobolectricTest {
     // Check default voice gender and tone
     assertEquals("MALE", prefs.voiceGender)
     assertEquals("PAYTM_TRIAD", prefs.soundboxTone)
+    assertEquals(1.0f, prefs.soundboxVolume, 0.01f) // default max volume
+    assertEquals(1.0f, prefs.soundboxSpeed, 0.01f) // default normal speed
 
     // Verify all VoiceGender entries
     assertEquals(2, com.example.model.VoiceGender.entries.size)
     val male = com.example.model.VoiceGender.MALE
     val female = com.example.model.VoiceGender.FEMALE
-    assertEquals("Male Voice", male.displayName)
-    assertEquals("Female Voice", female.displayName)
+    assertEquals("Google Voice (Male)", male.displayName)
+    assertEquals("Google Voice (Female)", female.displayName)
 
-    // Verify all SoundboxTone entries
-    assertEquals(5, com.example.model.SoundboxTone.entries.size)
+    // Verify all 11 SoundboxTone entries
+    assertEquals(11, com.example.model.SoundboxTone.entries.size)
     val paytm = com.example.model.SoundboxTone.PAYTM_TRIAD
     val phonepe = com.example.model.SoundboxTone.PHONEPE_DING
     val gpay = com.example.model.SoundboxTone.GPAY_MARIMBA
-    val beep = com.example.model.SoundboxTone.CLASSIC_BEEP
+    val bhim = com.example.model.SoundboxTone.BHIM_UPI
+    val amazon = com.example.model.SoundboxTone.AMAZON_PAY
+    val airtel = com.example.model.SoundboxTone.AIRTEL_PAY
+    val tata = com.example.model.SoundboxTone.TATA_EV_CHIME
     val harp = com.example.model.SoundboxTone.CRYSTAL_HARP
+    val radar = com.example.model.SoundboxTone.SONIC_RADAR
+    val beep = com.example.model.SoundboxTone.CLASSIC_BEEP
+    val cash = com.example.model.SoundboxTone.CASH_REGISTER
 
     assertEquals("Paytm / UPI Triad", paytm.displayName)
     assertEquals("PhonePe Double Ding", phonepe.displayName)
     assertEquals("Google Pay Warm Chime", gpay.displayName)
-    assertEquals("Soundbox Sharp Beep", beep.displayName)
+    assertEquals("BHIM UPI Symphony", bhim.displayName)
+    assertEquals("Amazon Pay Dual Chime", amazon.displayName)
+    assertEquals("Airtel Payments Tone", airtel.displayName)
+    assertEquals("Tata EV Futuristic Chime", tata.displayName)
     assertEquals("Crystal 4-Tone Harp", harp.displayName)
+    assertEquals("Sonic Pulse Alert", radar.displayName)
+    assertEquals("Soundbox Sharp Beep", beep.displayName)
+    assertEquals("Cash Register Cha-Ching", cash.displayName)
 
     // Verify SoundboxTone.fromId lookup
     assertEquals(paytm, com.example.model.SoundboxTone.fromId("PAYTM_TRIAD"))
-    assertEquals(phonepe, com.example.model.SoundboxTone.fromId("PHONEPE_DING"))
-    assertEquals(gpay, com.example.model.SoundboxTone.fromId("GPAY_MARIMBA"))
-    assertEquals(beep, com.example.model.SoundboxTone.fromId("CLASSIC_BEEP"))
-    assertEquals(harp, com.example.model.SoundboxTone.fromId("CRYSTAL_HARP"))
+    assertEquals(bhim, com.example.model.SoundboxTone.fromId("BHIM_UPI"))
+    assertEquals(amazon, com.example.model.SoundboxTone.fromId("AMAZON_PAY"))
+    assertEquals(airtel, com.example.model.SoundboxTone.fromId("AIRTEL_PAY"))
+    assertEquals(tata, com.example.model.SoundboxTone.fromId("TATA_EV_CHIME"))
+    assertEquals(radar, com.example.model.SoundboxTone.fromId("SONIC_RADAR"))
+    assertEquals(cash, com.example.model.SoundboxTone.fromId("CASH_REGISTER"))
     assertEquals(paytm, com.example.model.SoundboxTone.fromId("UNKNOWN_TONE"))
 
     // Test saving preferences
     prefs.voiceGender = female.name
-    prefs.soundboxTone = phonepe.id
+    prefs.soundboxTone = bhim.id
+    prefs.soundboxVolume = 0.85f
+    prefs.soundboxSpeed = 1.25f
     assertEquals("FEMALE", prefs.voiceGender)
-    assertEquals("PHONEPE_DING", prefs.soundboxTone)
+    assertEquals("BHIM_UPI", prefs.soundboxTone)
+    assertEquals(0.85f, prefs.soundboxVolume, 0.01f)
+    assertEquals(1.25f, prefs.soundboxSpeed, 0.01f)
 
-    // Verify SpeechEngine entries
-    assertEquals(3, com.example.model.SpeechEngine.entries.size)
-    val naturalCloud = com.example.model.SpeechEngine.NATURAL_CLOUD
-    val googleServices = com.example.model.SpeechEngine.GOOGLE_SPEECH_SERVICES
-    val systemTts = com.example.model.SpeechEngine.SYSTEM_TTS
-
-    assertEquals("NATURAL_CLOUD", prefs.speechEngine)
-    assertEquals(naturalCloud, com.example.model.SpeechEngine.fromId("NATURAL_CLOUD"))
-    assertEquals(googleServices, com.example.model.SpeechEngine.fromId("GOOGLE_SPEECH_SERVICES"))
-    assertEquals(systemTts, com.example.model.SpeechEngine.fromId("SYSTEM_TTS"))
-    assertEquals(naturalCloud, com.example.model.SpeechEngine.fromId("INVALID"))
-
-    prefs.speechEngine = googleServices.id
-    assertEquals("GOOGLE_SPEECH_SERVICES", prefs.speechEngine)
+    // Verify Google Voice held exclusively in SpeechEngine
+    assertEquals(1, com.example.model.SpeechEngine.entries.size)
+    val googleVoice = com.example.model.SpeechEngine.GOOGLE_VOICE
+    assertEquals("GOOGLE_VOICE", prefs.speechEngine)
+    assertEquals(googleVoice, com.example.model.SpeechEngine.fromId("GOOGLE_VOICE"))
+    assertEquals(googleVoice, com.example.model.SpeechEngine.fromId("ANY_OTHER"))
   }
 
   @Test

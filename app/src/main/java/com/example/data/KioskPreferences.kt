@@ -26,6 +26,8 @@ class KioskPreferences(context: Context) {
         private const val KEY_VOICE_GENDER = "kiosk_voice_gender"
         private const val KEY_SOUNDBOX_TONE = "kiosk_soundbox_tone"
         private const val KEY_SPEECH_ENGINE = "kiosk_speech_engine"
+        private const val KEY_SOUNDBOX_VOLUME = "kiosk_soundbox_volume"
+        private const val KEY_SOUNDBOX_SPEED = "kiosk_soundbox_speed"
         private const val KEY_IS_LIGHT_MODE = "kiosk_is_light_mode"
         private const val KEY_LAST_OPENED_PACKAGE = "kiosk_last_opened_package"
 
@@ -131,8 +133,16 @@ class KioskPreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_SOUNDBOX_TONE, value).apply()
 
     var speechEngine: String
-        get() = prefs.getString(KEY_SPEECH_ENGINE, "NATURAL_CLOUD") ?: "NATURAL_CLOUD"
+        get() = prefs.getString(KEY_SPEECH_ENGINE, "GOOGLE_VOICE") ?: "GOOGLE_VOICE"
         set(value) = prefs.edit().putString(KEY_SPEECH_ENGINE, value).apply()
+
+    var soundboxVolume: Float
+        get() = prefs.getFloat(KEY_SOUNDBOX_VOLUME, 1.0f)
+        set(value) = prefs.edit().putFloat(KEY_SOUNDBOX_VOLUME, value.coerceIn(0.1f, 1.0f)).apply()
+
+    var soundboxSpeed: Float
+        get() = prefs.getFloat(KEY_SOUNDBOX_SPEED, 1.0f)
+        set(value) = prefs.edit().putFloat(KEY_SOUNDBOX_SPEED, value.coerceIn(0.7f, 1.6f)).apply()
 
     var isLightMode: Boolean
         get() = prefs.getBoolean(KEY_IS_LIGHT_MODE, false)
