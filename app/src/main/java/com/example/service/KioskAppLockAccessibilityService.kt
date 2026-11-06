@@ -5,7 +5,6 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
@@ -34,27 +33,6 @@ class KioskAppLockAccessibilityService : AccessibilityService() {
         private const val TAG = "AppLockAccessibility"
         var isServiceRunning = false
             private set
-
-        @Volatile
-        var instance: KioskAppLockAccessibilityService? = null
-            private set
-
-        /**
-         * System-wide screen lock via accessibility service (GLOBAL_ACTION_LOCK_SCREEN).
-         */
-        fun lockScreen(): Boolean {
-            val service = instance ?: return false
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                try {
-                    service.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to perform GLOBAL_ACTION_LOCK_SCREEN", e)
-                    false
-                }
-            } else {
-                false
-            }
-        }
 
         /**
          * Checks whether KioskAppLockAccessibilityService is enabled in Android Settings.
@@ -101,7 +79,6 @@ class KioskAppLockAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        instance = this
         isServiceRunning = true
         Log.i(TAG, "KioskAppLockAccessibilityService connected and actively protecting apps.")
 
@@ -158,9 +135,6 @@ class KioskAppLockAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (instance === this) {
-            instance = null
-        }
         isServiceRunning = false
     }
 }

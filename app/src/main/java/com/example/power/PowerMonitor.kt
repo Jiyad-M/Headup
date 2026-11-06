@@ -89,50 +89,9 @@ class PowerMonitor private constructor(
                 }
             }
         }
-
-        /**
-         * Real-time synchronous battery state query directly from Android BatteryManager
-         */
-        fun queryLiveBatteryState(context: Context): PowerState {
-            return try {
-                val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-                if (intent != null) {
-                    val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                            status == BatteryManager.BATTERY_STATUS_FULL
-                    val chargePlug = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
-                    val isPlugged = chargePlug == BatteryManager.BATTERY_PLUGGED_AC ||
-                            chargePlug == BatteryManager.BATTERY_PLUGGED_USB ||
-                            chargePlug == BatteryManager.BATTERY_PLUGGED_WIRELESS
-
-                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                    val batteryPct = if (level != -1 && scale != -1) {
-                        (level * 100 / scale.toFloat()).toInt()
-                    } else 100
-
-                    val plugType = when (chargePlug) {
-                        BatteryManager.BATTERY_PLUGGED_AC -> "AC Wall Charger"
-                        BatteryManager.BATTERY_PLUGGED_USB -> "USB Charging"
-                        BatteryManager.BATTERY_PLUGGED_WIRELESS -> "Wireless Dock"
-                        else -> "Battery Discharging"
-                    }
-                    PowerState(
-                        isPlugged = isPlugged,
-                        batteryLevel = batteryPct,
-                        isCharging = isCharging,
-                        plugType = plugType
-                    )
-                } else {
-                    PowerState()
-                }
-            } catch (_: Exception) {
-                PowerState()
-            }
-        }
     }
 
-    private val _powerState = MutableStateFlow(queryLiveBatteryState(context))
+    private val _powerState = MutableStateFlow(PowerState())
     val powerState: StateFlow<PowerState> = _powerState.asStateFlow()
 
     private val _isDisplayCompletelyOff = MutableStateFlow(false)
@@ -150,19 +109,9 @@ class PowerMonitor private constructor(
             intent ?: return
             when (intent.action) {
                 Intent.ACTION_POWER_CONNECTED -> {
-                    _powerState.value = _powerState.value.copy(
-                        isPlugged = true,
-                        isCharging = true,
-                        plugType = "AC Wall Charger"
-                    )
                     handlePowerConnected()
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
-                    _powerState.value = _powerState.value.copy(
-                        isPlugged = false,
-                        isCharging = false,
-                        plugType = "Battery Discharging"
-                    )
                     handlePowerDisconnected()
                 }
                 Intent.ACTION_SCREEN_ON -> {
@@ -263,13 +212,6 @@ class PowerMonitor private constructor(
         _unplugCountdown.value = null
         _isDisplayCompletelyOff.value = false
 
-        // Immediately update state to plugged so UI and lock watchdog are in sync
-        _powerState.value = _powerState.value.copy(
-            isPlugged = true,
-            isCharging = true,
-            plugType = "AC Wall Charger"
-        )
-
         // Always wake the hardware display when plugged in
         wakeDevice()
 
@@ -296,13 +238,6 @@ class PowerMonitor private constructor(
         isTemporaryWakeOverridden = false
         _unplugCountdown.value = null
 
-        // Immediately mark unplugged so UI updates instantly and displays correct status
-        _powerState.value = _powerState.value.copy(
-            isPlugged = false,
-            isCharging = false,
-            plugType = "Battery Discharging"
-        )
-
         if (!preferences.sleepOnUnplugged) {
             return
         }
@@ -312,8 +247,7 @@ class PowerMonitor private constructor(
             delay(3000L)
 
             // If still unplugged, turn off display hardware
-            val liveState = queryLiveBatteryState(context)
-            if (!_powerState.value.isPlugged && !liveState.isPlugged) {
+            if (!_powerState.value.isPlugged) {
                 turnHardwareScreenOff()
             }
         }
@@ -326,18 +260,8 @@ class PowerMonitor private constructor(
      * - Triple power button press (3 presses within 2.5s) allows the display to turn ON.
      */
     fun handleScreenOn() {
-        val liveState = queryLiveBatteryState(context)
-        val isPlugged = _powerState.value.isPlugged && liveState.isPlugged
+        val isPlugged = _powerState.value.isPlugged
         val sleepOnUnplugged = preferences.sleepOnUnplugged
-
-        // Ensure state is kept synchronized if live check reports unplugged
-        if (!isPlugged && _powerState.value.isPlugged) {
-            _powerState.value = _powerState.value.copy(
-                isPlugged = false,
-                isCharging = false,
-                plugType = "Battery Discharging"
-            )
-        }
 
         // If not in sleep on unplugged mode or device is currently plugged into charger, allow screen on
         if (!sleepOnUnplugged || isPlugged) {
@@ -399,17 +323,7 @@ class PowerMonitor private constructor(
             Log.e(TAG, "DevicePolicyManager lockNow failed", e)
         }
 
-        // 2. Secondary: Use AccessibilityService GLOBAL_ACTION_LOCK_SCREEN for instant hardware screen lock
-        try {
-            if (com.example.service.KioskAppLockAccessibilityService.lockScreen()) {
-                Log.i(TAG, "Hardware display turned OFF via AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN")
-                return
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Accessibility lockScreen failed", e)
-        }
-
-        // 3. Fallback: Set screen timeout to 1000ms if Write Settings permission is available
+        // 2. Fallback: Set screen timeout to 1000ms if Write Settings permission is available
         if (canWriteSystemSettings(context)) {
             try {
                 Settings.System.putInt(
